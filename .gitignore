@@ -1,0 +1,8 @@
+####Virtual Environment
+.venv/
+venv/
+virtual-env/
+
+#Agents md files
+AGENTS.md
+CLAUDE.md
