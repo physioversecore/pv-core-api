@@ -1,0 +1,24 @@
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UVICORN_RELOAD="true"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+COPY prisma/ prisma/
+RUN uv run prisma generate
+
+COPY . .
+RUN uv sync --frozen
+
+EXPOSE 8000
+
+CMD ["python", "main.py"]
