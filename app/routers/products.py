@@ -1,18 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
-from prisma.enums import Role
 
-from app.database import get_db
-from app.deps import get_admin_user, get_current_user
-from app.models.product import (
+from app import (
     ProductCreate,
     ProductListResponse,
     ProductResponse,
     ProductUpdate,
-)
-from app.services.product import (
     create_product,
     delete_product,
+    get_admin_user,
+    get_current_user,
+    get_db,
     get_product,
     get_products,
     update_product,

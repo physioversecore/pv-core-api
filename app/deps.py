@@ -1,10 +1,9 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from prisma import Prisma
 
-from app.config import settings
-from app.database import get_db
+from app import get_db, settings
 
 security = HTTPBearer()
 

@@ -1,22 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 
-from app.database import get_db
-from app.deps import get_current_user
-from app.models.cart import (
+from app import (
     CartItemCreate,
     CartItemResponse,
     CartItemUpdate,
     CartResponse,
-)
-from app.services.cart import (
     add_to_cart,
     clear_cart,
     get_cart,
+    get_current_user,
+    get_db,
+    get_product,
     remove_cart_item,
     update_cart_item,
 )
-from app.services.product import get_product
 
 router = APIRouter(prefix="/cart", tags=["Cart"])
 

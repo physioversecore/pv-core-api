@@ -2,14 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
 from prisma.enums import UserStatus
 
-from app.database import get_db
-from app.deps import get_admin_user
-from app.models.auth import UserResponse
-from app.models.therapist import TherapistResponse
-from app.models.payment import PaymentListResponse, PaymentResponse
-from app.models.session import SessionListResponse, SessionResponse
-from app.services.payment import get_all_payments
-from app.services.session import get_all_sessions, update_session
+from app import (
+    PaymentListResponse,
+    PaymentResponse,
+    SessionListResponse,
+    SessionResponse,
+    UserResponse,
+    get_admin_user,
+    get_all_payments,
+    get_all_sessions,
+    get_db,
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -42,7 +45,8 @@ async def update_user_status(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updated = await db.user.update(
-        where={"id": user_id}, data={"status": getattr(UserStatus, status.upper(), UserStatus.APPROVED)}
+        where={"id": user_id},
+        data={"status": getattr(UserStatus, status.upper(), UserStatus.APPROVED)},
     )
     return UserResponse.model_validate(updated)
 

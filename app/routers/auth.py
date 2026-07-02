@@ -2,15 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
-from app.database import get_db
-from app.deps import get_current_user
-from app.models.auth import (
+from app import (
     LoginRequest,
     SignupRequest,
     TokenResponse,
     UserResponse,
+    authenticate_user,
+    create_access_token,
+    create_user,
+    get_current_user,
+    get_db,
 )
-from app.services.auth import authenticate_user, create_access_token, create_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -56,9 +58,7 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
 async def me(current_user=Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
 
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout():
-    # In a stateless JWT authentication system, logout is typically handled on the client side
-    # by deleting the token. However, if you want to implement server-side token invalidation,
-    # you would need to maintain a token blacklist or use a token revocation strategy.
     return None

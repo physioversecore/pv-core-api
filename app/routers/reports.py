@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
 from prisma.enums import Role
 
-from app.database import get_db
-from app.deps import get_current_user
-from app.models.report import ReportCreate, ReportResponse, ReportUpdate
-from app.services.report import (
+from app import (
+    ReportCreate,
+    ReportResponse,
+    ReportUpdate,
     create_report,
     delete_report,
+    get_current_user,
+    get_db,
     get_report,
     get_reports_for_patient,
     update_report,

@@ -2,24 +2,22 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
 from prisma.enums import Role
 
-from app.database import get_db
-from app.deps import get_current_user
-from app.models.session import (
+from app import (
     SessionCreate,
     SessionListResponse,
     SessionResponse,
     SessionUpdate,
-)
-from app.services.session import (
     create_session,
     delete_session,
     get_all_sessions,
+    get_current_user,
+    get_db,
     get_session,
     get_sessions_for_patient,
     get_sessions_for_therapist,
+    get_therapist_by_user,
     update_session,
 )
-from app.services.therapist import get_therapist_by_user
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 

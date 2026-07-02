@@ -2,17 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
 from prisma.enums import Role
 
-from app.database import get_db
-from app.deps import get_current_user
-from app.models.therapist import (
+from app import (
     TherapistCreate,
     TherapistListResponse,
     TherapistResponse,
     TherapistUpdate,
-)
-from app.services.therapist import (
     create_therapist,
     delete_therapist,
+    get_current_user,
+    get_db,
     get_therapist,
     get_therapist_by_user,
     get_therapists,
