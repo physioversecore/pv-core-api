@@ -1,0 +1,36 @@
+from pydantic import BaseModel, EmailStr
+
+
+class SignupRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str = "PATIENT"
+    city: str | None = None
+    phone: str | None = None
+    specialty: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserResponse"
+
+
+class UserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    city: str | None = None
+    phone: str | None = None
+    specialty: str | None = None
+    status: str
+
+    class Config:
+        from_attributes = True

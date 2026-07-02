@@ -1,0 +1,17 @@
+####Virtual Environment
+.venv/
+venv/
+virtual-env/
+
+#Agents md files
+AGENTS.md
+CLAUDE.md
+
+# Environment
+.env
+
+# Prisma
+prisma/__pycache__/
+
+#__pycache__/ 
+__pycache__/

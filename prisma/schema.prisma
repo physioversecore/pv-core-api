@@ -1,0 +1,155 @@
+generator client {
+  provider             = "prisma-client-py"
+  recursive_type_depth = -1
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  THERAPIST
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SessionType {
+  HOME_VISIT
+  CLINIC
+}
+
+enum ProductCategory {
+  EQUIPMENT
+  MEDICINE
+  NUTRITION
+}
+
+enum CartItemType {
+  BUY
+  RENT
+  MEDICINE
+  NUTRITION
+}
+
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  email     String     @unique
+  password  String
+  role      Role       @default(PATIENT)
+  city      String?
+  phone     String?
+  specialty String?
+  status    UserStatus @default(PENDING)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  therapist   Therapist?
+  sessionsAsPatient Session[] @relation("PatientSessions")
+  reports     Report[]
+  cartItems   CartItem[]
+  payments    Payment[]
+}
+
+model Therapist {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  specialty  String
+  city       String
+  gender     String
+  rating     Float    @default(0)
+  reviews    Int      @default(0)
+  price      Float
+  experience Int
+  bio        String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sessions Session[]
+}
+
+model Product {
+  id         String           @id @default(cuid())
+  name       String
+  category   ProductCategory
+  price      Float
+  rentPerDay Float            @default(0)
+  inStock    Int              @default(0)
+  emoji      String           @default("")
+  description String?
+  imageUrl   String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  cartItems CartItem[]
+}
+
+model Session {
+  id          String        @id @default(cuid())
+  therapistId String
+  therapist   Therapist     @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  patientId   String
+  patient     User          @relation("PatientSessions", fields: [patientId], references: [id], onDelete: Cascade)
+  date        DateTime
+  time        String
+  type        SessionType   @default(HOME_VISIT)
+  status      SessionStatus @default(SCHEDULED)
+  address     String
+  fee         Float
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   User     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  sessionId String?
+  title     String
+  content   String
+  fileUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+  status    String   @default("PENDING")
+  method    String   @default("CASH")
+  sessionId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CartItem {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type       CartItemType
+  quantity   Int          @default(1)
+  rentalDays Int          @default(7)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
