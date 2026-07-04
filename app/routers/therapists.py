@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    PaginationParams,
     TherapistCreate,
     TherapistListResponse,
     TherapistResponse,
@@ -11,9 +12,10 @@ from app import (
     delete_therapist,
     get_current_user,
     get_db,
-    get_therapist,
+    get_or_404,
     get_therapist_by_user,
     get_therapists,
+    pagination_params,
     update_therapist,
 )
 
@@ -22,11 +24,10 @@ router = APIRouter(prefix="/therapists", tags=["Therapists"])
 
 @router.get("", response_model=TherapistListResponse)
 async def list_therapists(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    pagination: PaginationParams = Depends(pagination_params),
     db: Prisma = Depends(get_db),
 ):
-    therapists, total = await get_therapists(db, skip=skip, limit=limit)
+    therapists, total = await get_therapists(db, **pagination)
     return TherapistListResponse(
         therapists=[TherapistResponse.model_validate(t) for t in therapists],
         total=total,
@@ -51,9 +52,7 @@ async def get_therapist_by_id(
     therapist_id: str,
     db: Prisma = Depends(get_db),
 ):
-    therapist = await get_therapist(db, therapist_id)
-    if not therapist:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    therapist = await get_or_404(db, "therapist", therapist_id)
     return TherapistResponse.model_validate(therapist)
 
 
@@ -86,9 +85,7 @@ async def update_therapist_profile(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    therapist = await get_therapist(db, therapist_id)
-    if not therapist:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    therapist = await get_or_404(db, "therapist", therapist_id)
     if therapist.userId != current_user.id and current_user.role != Role.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     updated = await update_therapist(
@@ -103,9 +100,7 @@ async def delete_therapist_profile(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    therapist = await get_therapist(db, therapist_id)
-    if not therapist:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    therapist = await get_or_404(db, "therapist", therapist_id)
     if therapist.userId != current_user.id and current_user.role != Role.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     await delete_therapist(db, therapist_id)

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    PaginationParams,
     PaymentCreate,
     PaymentListResponse,
     PaymentResponse,
@@ -11,8 +12,9 @@ from app import (
     get_all_payments,
     get_current_user,
     get_db,
-    get_payment,
+    get_or_404,
     get_payments_for_user,
+    pagination_params,
     update_payment,
 )
 
@@ -43,16 +45,15 @@ async def make_payment(
 
 @router.get("", response_model=PaymentListResponse)
 async def list_payments(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    pagination: PaginationParams = Depends(pagination_params),
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     if current_user.role == Role.ADMIN:
-        payments, total = await get_all_payments(db, skip=skip, limit=limit)
+        payments, total = await get_all_payments(db, **pagination)
     else:
         payments, total = await get_payments_for_user(
-            db, current_user.id, skip=skip, limit=limit
+            db, current_user.id, **pagination
         )
     return PaymentListResponse(
         payments=[PaymentResponse.model_validate(p) for p in payments],
@@ -65,21 +66,17 @@ async def get_payment_by_id(
     payment_id: str,
     db: Prisma = Depends(get_db),
 ):
-    payment = await get_payment(db, payment_id)
-    if not payment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    payment = await get_or_404(db, "payment", payment_id)
     return PaymentResponse.model_validate(payment)
 
 
 @router.put("/{payment_id}/status", response_model=PaymentResponse)
 async def update_payment_status(
     payment_id: str,
-    status: str,
+    new_status: str,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    payment = await get_payment(db, payment_id)
-    if not payment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    updated = await update_payment(db, payment_id, {"status": status})
+    await get_or_404(db, "payment", payment_id)
+    updated = await update_payment(db, payment_id, {"status": new_status})
     return PaymentResponse.model_validate(updated)

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 
 from app import (
+    PaginationParams,
     ProductCreate,
     ProductListResponse,
     ProductResponse,
@@ -9,10 +10,10 @@ from app import (
     create_product,
     delete_product,
     get_admin_user,
-    get_current_user,
     get_db,
-    get_product,
+    get_or_404,
     get_products,
+    pagination_params,
     update_product,
 )
 
@@ -21,12 +22,11 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 @router.get("", response_model=ProductListResponse)
 async def list_products(
-    category: str | None = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    category: str | None = None,
+    pagination: PaginationParams = Depends(pagination_params),
     db: Prisma = Depends(get_db),
 ):
-    products, total = await get_products(db, category=category, skip=skip, limit=limit)
+    products, total = await get_products(db, category=category, **pagination)
     return ProductListResponse(
         products=[ProductResponse.model_validate(p) for p in products],
         total=total,
@@ -38,9 +38,7 @@ async def get_product_by_id(
     product_id: str,
     db: Prisma = Depends(get_db),
 ):
-    product = await get_product(db, product_id)
-    if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    product = await get_or_404(db, "product", product_id)
     return ProductResponse.model_validate(product)
 
 
@@ -65,9 +63,7 @@ async def update_product_by_id(
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    existing = await get_product(db, product_id)
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await get_or_404(db, "product", product_id)
     updated = await update_product(
         db, product_id, data.model_dump(exclude_none=True)
     )
@@ -80,7 +76,5 @@ async def delete_product_by_id(
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    existing = await get_product(db, product_id)
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await get_or_404(db, "product", product_id)
     await delete_product(db, product_id)

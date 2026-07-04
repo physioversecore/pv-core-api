@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    PaginationParams,
     ReportCreate,
     ReportResponse,
     ReportUpdate,
@@ -10,8 +11,9 @@ from app import (
     delete_report,
     get_current_user,
     get_db,
-    get_report,
+    get_or_404,
     get_reports_for_patient,
+    pagination_params,
     update_report,
 )
 
@@ -34,16 +36,21 @@ async def create_new_report(
 
 @router.get("", response_model=list[ReportResponse])
 async def list_reports(
-    patient_id: str | None = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    patient_id: str | None = None,
+    pagination: PaginationParams = Depends(pagination_params),
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    pid = patient_id or current_user.id
     if current_user.role == Role.PATIENT:
         pid = current_user.id
-    reports, _ = await get_reports_for_patient(db, pid, skip=skip, limit=limit)
+    else:
+        pid = patient_id
+        if not pid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="patient_id is required for therapists and admins",
+            )
+    reports, _ = await get_reports_for_patient(db, pid, **pagination)
     return [ReportResponse.model_validate(r) for r in reports]
 
 
@@ -52,9 +59,7 @@ async def get_report_by_id(
     report_id: str,
     db: Prisma = Depends(get_db),
 ):
-    report = await get_report(db, report_id)
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    report = await get_or_404(db, "report", report_id)
     return ReportResponse.model_validate(report)
 
 
@@ -67,9 +72,7 @@ async def update_report_by_id(
 ):
     if current_user.role not in (Role.THERAPIST, Role.ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    report = await get_report(db, report_id)
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await get_or_404(db, "report", report_id)
     updated = await update_report(
         db, report_id, data.model_dump(exclude_none=True)
     )
@@ -84,7 +87,5 @@ async def delete_report_by_id(
 ):
     if current_user.role not in (Role.THERAPIST, Role.ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    report = await get_report(db, report_id)
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await get_or_404(db, "report", report_id)
     await delete_report(db, report_id)

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    PaginationParams,
     SessionCreate,
     SessionListResponse,
     SessionResponse,
@@ -12,10 +13,11 @@ from app import (
     get_all_sessions,
     get_current_user,
     get_db,
-    get_session,
+    get_or_404,
     get_sessions_for_patient,
     get_sessions_for_therapist,
     get_therapist_by_user,
+    pagination_params,
     update_session,
 )
 
@@ -50,24 +52,23 @@ async def book_session(
 
 @router.get("", response_model=SessionListResponse)
 async def list_sessions(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    pagination: PaginationParams = Depends(pagination_params),
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     if current_user.role == Role.PATIENT:
         sessions, total = await get_sessions_for_patient(
-            db, current_user.id, skip=skip, limit=limit
+            db, current_user.id, **pagination
         )
     elif current_user.role == Role.THERAPIST:
         therapist = await get_therapist_by_user(db, current_user.id)
         if not therapist:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         sessions, total = await get_sessions_for_therapist(
-            db, therapist.id, skip=skip, limit=limit
+            db, therapist.id, **pagination
         )
     elif current_user.role == Role.ADMIN:
-        sessions, total = await get_all_sessions(db, skip=skip, limit=limit)
+        sessions, total = await get_all_sessions(db, **pagination)
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
@@ -82,9 +83,7 @@ async def get_session_by_id(
     session_id: str,
     db: Prisma = Depends(get_db),
 ):
-    session = await get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    session = await get_or_404(db, "session", session_id)
     return SessionResponse.model_validate(session)
 
 
@@ -95,9 +94,7 @@ async def update_session_by_id(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    session = await get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    session = await get_or_404(db, "session", session_id)
     if (
         session.patientId != current_user.id
         and current_user.role != Role.ADMIN
@@ -115,9 +112,7 @@ async def cancel_session(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    session = await get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    session = await get_or_404(db, "session", session_id)
     if (
         session.patientId != current_user.id
         and current_user.role != Role.ADMIN

@@ -1,17 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import UserStatus
 
 from app import (
-    PaymentListResponse,
-    PaymentResponse,
-    SessionListResponse,
-    SessionResponse,
+    PaginationParams,
     UserResponse,
     get_admin_user,
-    get_all_payments,
-    get_all_sessions,
     get_db,
+    get_or_404,
+    pagination_params,
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -19,9 +16,8 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
-    role: str | None = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    role: str | None = None,
+    pagination: PaginationParams = Depends(pagination_params),
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
@@ -29,7 +25,7 @@ async def list_users(
     if role:
         where["role"] = role.upper()
     users = await db.user.find_many(
-        where=where, skip=skip, take=limit, order={"createdAt": "desc"}
+        where=where, order={"createdAt": "desc"}, **pagination
     )
     return [UserResponse.model_validate(u) for u in users]
 
@@ -37,46 +33,16 @@ async def list_users(
 @router.put("/users/{user_id}/status", response_model=UserResponse)
 async def update_user_status(
     user_id: str,
-    status: str,
+    new_status: str,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    user = await db.user.find_unique(where={"id": user_id})
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await get_or_404(db, "user", user_id)
     updated = await db.user.update(
         where={"id": user_id},
-        data={"status": getattr(UserStatus, status.upper(), UserStatus.APPROVED)},
+        data={"status": getattr(UserStatus, new_status.upper(), UserStatus.APPROVED)},
     )
     return UserResponse.model_validate(updated)
-
-
-@router.get("/payments", response_model=PaymentListResponse)
-async def list_all_payments(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
-    _=Depends(get_admin_user),
-    db: Prisma = Depends(get_db),
-):
-    payments, total = await get_all_payments(db, skip=skip, limit=limit)
-    return PaymentListResponse(
-        payments=[PaymentResponse.model_validate(p) for p in payments],
-        total=total,
-    )
-
-
-@router.get("/sessions", response_model=SessionListResponse)
-async def list_all_sessions(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
-    _=Depends(get_admin_user),
-    db: Prisma = Depends(get_db),
-):
-    sessions, total = await get_all_sessions(db, skip=skip, limit=limit)
-    return SessionListResponse(
-        sessions=[SessionResponse.model_validate(s) for s in sessions],
-        total=total,
-    )
 
 
 @router.get("/therapists/pending", response_model=list[UserResponse])

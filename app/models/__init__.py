@@ -1,8 +1,10 @@
 from app.models.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     SignupRequest,
     TokenResponse,
     UserResponse,
+    UserUpdate,
 )
 from app.models.therapist import (
     TherapistCreate,
