@@ -24,4 +24,4 @@ class PaymentResponse(BaseModel):
 
 class PaymentListResponse(BaseModel):
     payments: list[PaymentResponse]
-    total: float
+    total: int

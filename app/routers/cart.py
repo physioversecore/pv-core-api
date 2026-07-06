@@ -11,7 +11,7 @@ from app import (
     get_cart,
     get_current_user,
     get_db,
-    get_product,
+    get_or_404,
     remove_cart_item,
     update_cart_item,
 )
@@ -53,9 +53,7 @@ async def add_item_to_cart(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    product = await get_product(db, data.productId)
-    if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await get_or_404(db, "product", data.productId)
     item = await add_to_cart(db, current_user.id, data.model_dump())
     full_item = await db.cartitem.find_unique(
         where={"id": item.id}, include={"product": True}

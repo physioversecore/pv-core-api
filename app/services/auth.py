@@ -39,3 +39,7 @@ async def authenticate_user(db: Prisma, email: str, password: str):
     if not user or not verify_password(password, user.password):
         return None
     return user
+
+
+async def update_user(db: Prisma, user_id: str, data: dict):
+    return await db.user.update(where={"id": user_id}, data=data)

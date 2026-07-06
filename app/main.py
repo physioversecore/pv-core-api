@@ -3,11 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import (
+from app.database import db
+
+from app.routers import (
     admin_router,
     auth_router,
     cart_router,
-    db,
     payments_router,
     products_router,
     reports_router,

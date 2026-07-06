@@ -1,9 +1,33 @@
-from fastapi import Depends, HTTPException, status
+from typing import TypedDict
+
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from prisma import Prisma
 
 from app import get_db, settings
+
+
+class PaginationParams(TypedDict):
+    skip: int
+    limit: int
+
+
+async def pagination_params(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+) -> PaginationParams:
+    return {"skip": skip, "limit": limit}
+
+
+async def get_or_404(db: Prisma, model: str, id: str):
+    table = getattr(db, model, None)
+    if table is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    obj = await table.find_unique(where={"id": id})
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return obj
 
 security = HTTPBearer()
 

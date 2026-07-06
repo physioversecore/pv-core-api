@@ -3,15 +3,20 @@ from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    ChangePasswordRequest,
     LoginRequest,
     SignupRequest,
     TokenResponse,
     UserResponse,
+    UserUpdate,
     authenticate_user,
     create_access_token,
     create_user,
     get_current_user,
     get_db,
+    hash_password,
+    update_user,
+    verify_password,
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -57,6 +62,30 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 async def me(current_user=Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_my_profile(
+    data: UserUpdate,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    user = await update_user(db, current_user.id, data.model_dump(exclude_none=True))
+    return UserResponse.model_validate(user)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if not verify_password(data.current_password, current_user.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    await update_user(db, current_user.id, {"password": hash_password(data.new_password)})
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

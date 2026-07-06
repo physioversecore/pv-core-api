@@ -1,12 +1,13 @@
 from app.config import settings
 from app.database import db, get_db
-from app.deps import get_admin_user, get_current_user
+from app.deps import PaginationParams, get_admin_user, get_current_user, get_or_404, pagination_params
 
 from app.models import (
     CartItemCreate,
     CartItemResponse,
     CartItemUpdate,
     CartResponse,
+    ChangePasswordRequest,
     LoginRequest,
     PaymentCreate,
     PaymentListResponse,
@@ -29,6 +30,7 @@ from app.models import (
     TherapistUpdate,
     TokenResponse,
     UserResponse,
+    UserUpdate,
 )
 
 from app.services import (
@@ -69,6 +71,7 @@ from app.services import (
     update_report,
     update_session,
     update_therapist,
+    update_user,
     verify_password,
 )
 
@@ -83,4 +86,4 @@ from app.routers import (
     therapists_router,
 )
 
-from app.main import app
+
