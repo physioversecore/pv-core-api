@@ -19,6 +19,7 @@ SCRIPTS = [
     "seed-products.py",
     "seed-sessions.py",
     "seed-reports.py",
+    "seed-reviews.py",
 ]
 
 

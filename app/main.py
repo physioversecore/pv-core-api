@@ -9,9 +9,11 @@ from app.routers import (
     admin_router,
     auth_router,
     cart_router,
+    patients_router,
     payments_router,
     products_router,
     reports_router,
+    reviews_router,
     sessions_router,
     therapists_router,
 )
@@ -40,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(patients_router, prefix="/api/v1")
 app.include_router(therapists_router, prefix="/api/v1")
 app.include_router(sessions_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
@@ -47,6 +50,7 @@ app.include_router(cart_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
+app.include_router(reviews_router, prefix="/api/v1")
 
 
 @app.get("/health")

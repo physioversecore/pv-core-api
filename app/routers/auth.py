@@ -12,6 +12,7 @@ from app import (
     authenticate_user,
     create_access_token,
     create_user,
+    generate_referral_code,
     get_current_user,
     get_db,
     hash_password,
@@ -34,6 +35,10 @@ async def signup(data: SignupRequest, db: Prisma = Depends(get_db)):
     user_data = data.model_dump(exclude={"password"})
     user_data["role"] = getattr(Role, data.role.upper(), Role.PATIENT)
     user_data["password"] = data.password
+
+    role_val = data.role.upper()
+    if role_val == "PATIENT":
+        user_data["referralCode"] = generate_referral_code()
 
     user = await create_user(db, user_data)
     token = create_access_token(user.id)

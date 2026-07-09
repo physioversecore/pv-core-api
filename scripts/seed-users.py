@@ -7,6 +7,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import bcrypt
 from prisma import Prisma
 
+import secrets
+import string
+
+REFERRAL_CODES: dict[str, str] = {}
+
+
+def _make_code() -> str:
+    chars = string.ascii_uppercase + string.digits
+    return "SAHA-" + "".join(secrets.choice(chars) for _ in range(8))
+
+
+def _get_code(email: str) -> str:
+    if email not in REFERRAL_CODES:
+        REFERRAL_CODES[email] = _make_code()
+    return REFERRAL_CODES[email]
+
+
 USERS = [
     {"email": "patient@test.com",     "password": "password123", "name": "John Doe",         "role": "PATIENT",   "city": "Kathmandu",  "phone": "9800000001", "status": "APPROVED"},
     {"email": "therapist@test.com",   "password": "password123", "name": "Dr. Jane Smith",   "role": "THERAPIST", "city": "Kathmandu",  "phone": "9800000002", "status": "APPROVED"},
@@ -35,11 +52,17 @@ async def main():
         existing = await db.user.find_unique(where={"email": email})
         if existing:
             print(f"SKIP  {email} — already exists (id={existing.id})")
+            if existing.role == "PATIENT" and not existing.referralCode:
+                code = _get_code(email)
+                await db.user.update(where={"id": existing.id}, data={"referralCode": code})
+                print(f"  → added referral code {code}")
             created_ids[email] = existing.id
             continue
 
         password = data.pop("password")
         data["password"] = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        if data.get("role") == "PATIENT":
+            data["referralCode"] = _get_code(email)
         user = await db.user.create(data=data)
         print(f"CREATED {email} — id={user.id}, role={user.role}")
         created_ids[email] = user.id

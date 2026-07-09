@@ -13,9 +13,11 @@ from app.routers import (
     admin_router,
     auth_router,
     cart_router,
+    patients_router,
     payments_router,
     products_router,
     reports_router,
+    reviews_router,
     sessions_router,
     therapists_router,
 )
@@ -35,6 +37,7 @@ _test_app.add_middleware(
     allow_headers=["*"],
 )
 _test_app.include_router(auth_router, prefix="/api/v1")
+_test_app.include_router(patients_router, prefix="/api/v1")
 _test_app.include_router(therapists_router, prefix="/api/v1")
 _test_app.include_router(sessions_router, prefix="/api/v1")
 _test_app.include_router(products_router, prefix="/api/v1")
@@ -42,6 +45,7 @@ _test_app.include_router(cart_router, prefix="/api/v1")
 _test_app.include_router(payments_router, prefix="/api/v1")
 _test_app.include_router(admin_router, prefix="/api/v1")
 _test_app.include_router(reports_router, prefix="/api/v1")
+_test_app.include_router(reviews_router, prefix="/api/v1")
 
 
 @_test_app.get("/health")
@@ -60,6 +64,7 @@ MOCK_PATIENT = SimpleNamespace(
     phone="9800000001",
     specialty=None,
     status="APPROVED",
+    referralCode="SAHA-TEST1234",
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -74,6 +79,7 @@ MOCK_THERAPIST_USER = SimpleNamespace(
     phone="9800000002",
     specialty="Physiotherapy",
     status="APPROVED",
+    referralCode=None,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -88,6 +94,7 @@ MOCK_ADMIN = SimpleNamespace(
     phone=None,
     specialty=None,
     status="APPROVED",
+    referralCode=None,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -171,7 +178,38 @@ MOCK_REPORT = SimpleNamespace(
     updatedAt=NOW,
 )
 
-TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report"]
+MOCK_COMPLETED_SESSION = SimpleNamespace(
+    id="session-completed-1",
+    therapistId="therapist-1",
+    patientId="patient-1",
+    date=NOW,
+    time="10:00",
+    type="HOME_VISIT",
+    status="COMPLETED",
+    address="Test Address",
+    fee=1500.0,
+    notes=None,
+    createdAt=NOW,
+    updatedAt=NOW,
+    therapist=MOCK_THERAPIST_PROFILE,
+    patient=MOCK_PATIENT,
+    review=None,
+)
+
+MOCK_REVIEW = SimpleNamespace(
+    id="review-1",
+    sessionId="session-completed-1",
+    patientId="patient-1",
+    therapistId="therapist-1",
+    rating=5,
+    comment="Great therapist",
+    createdAt=NOW,
+    updatedAt=NOW,
+    therapist=MOCK_THERAPIST_PROFILE,
+    session=MOCK_COMPLETED_SESSION,
+)
+
+TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review"]
 METHODS = [
     "find_unique",
     "find_many",
