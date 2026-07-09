@@ -46,20 +46,22 @@ enum CartItemType {
 }
 
 model User {
-  id        String     @id @default(cuid())
-  name      String
-  email     String     @unique
-  password  String
-  role      Role       @default(PATIENT)
-  city      String?
-  phone     String?
-  specialty String?
-  status    UserStatus @default(PENDING)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id            String     @id @default(cuid())
+  name          String
+  email         String     @unique
+  password      String
+  role          Role       @default(PATIENT)
+  city          String?
+  phone         String?
+  specialty     String?
+  status        UserStatus @default(PENDING)
+  referralCode  String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   therapist   Therapist?
   sessionsAsPatient Session[] @relation("PatientSessions")
+  reviews     Review[] @relation("PatientReviews")
   reports     Report[]
   cartItems   CartItem[]
   payments    Payment[]
@@ -82,6 +84,7 @@ model Therapist {
   updatedAt  DateTime @updatedAt
 
   sessions Session[]
+  reviewedBy Review[]
 }
 
 model Product {
@@ -115,6 +118,22 @@ model Session {
   notes       String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+
+  review Review?
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  patientId   String
+  patient     User     @relation("PatientReviews", fields: [patientId], references: [id], onDelete: Cascade)
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Report {

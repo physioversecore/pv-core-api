@@ -51,3 +51,15 @@ from app.services.report import (
     get_reports_for_patient,
     update_report,
 )
+from app.services.patient import (
+    generate_referral_code,
+    get_patient_dashboard,
+    get_patient_referral,
+)
+from app.services.review import (
+    create_review,
+    get_completed_sessions_without_review,
+    get_review_by_patient_and_therapist,
+    get_review_by_session,
+    get_reviews_for_patient,
+)

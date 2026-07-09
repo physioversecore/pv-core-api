@@ -22,6 +22,7 @@ class SessionUpdate(BaseModel):
 class SessionResponse(BaseModel):
     id: str
     therapistId: str
+    therapistName: str = ""
     patientId: str
     date: datetime
     time: str

@@ -40,3 +40,14 @@ from app.models.report import (
     ReportResponse,
     ReportUpdate,
 )
+from app.models.patient import (
+    NextSessionInfo,
+    PatientDashboardResponse,
+    ReferralResponse,
+)
+from app.models.review import (
+    ReviewCreate,
+    ReviewListResponse,
+    ReviewResponse,
+    TherapistToRate,
+)
