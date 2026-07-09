@@ -25,6 +25,7 @@ class TestTherapistsToRate:
 class TestCreateReview:
     def test_create_success(self, patient_client, mock_db):
         mock_db.review.find_unique.return_value = None
+        mock_db.review.find_first.return_value = None
         mock_db.session.find_unique.return_value = MOCK_COMPLETED_SESSION
         mock_db.review.create.return_value = MOCK_REVIEW
 
@@ -38,8 +39,22 @@ class TestCreateReview:
         assert data["rating"] == 5
         assert data["comment"] == "Great therapist"
 
+    def test_duplicate_therapist_review(self, patient_client, mock_db):
+        mock_db.review.find_unique.return_value = None
+        mock_db.review.find_first.return_value = MOCK_REVIEW
+        mock_db.session.find_unique.return_value = MOCK_COMPLETED_SESSION
+
+        response = patient_client.post(
+            "/api/v1/reviews",
+            json={"sessionId": "session-completed-1", "rating": 4, "comment": "Good"},
+        )
+
+        assert response.status_code == 409
+        assert "already reviewed this therapist" in response.text
+
     def test_missing_session(self, patient_client, mock_db):
         mock_db.review.find_unique.return_value = None
+        mock_db.review.find_first.return_value = None
         mock_db.session.find_unique.return_value = None
 
         response = patient_client.post(

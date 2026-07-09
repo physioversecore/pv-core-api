@@ -12,6 +12,7 @@ from app import (
     get_completed_sessions_without_review,
     get_current_user,
     get_db,
+    get_review_by_patient_and_therapist,
     get_review_by_session,
     get_reviews_for_patient,
     pagination_params,
@@ -69,6 +70,13 @@ async def submit_review(
     )
     if not session or session.patientId != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    already = await get_review_by_patient_and_therapist(db, current_user.id, session.therapistId)
+    if already:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You have already reviewed this therapist",
+        )
 
     review = await create_review(
         db,

@@ -2,12 +2,22 @@ from prisma import Prisma
 
 
 async def get_completed_sessions_without_review(db: Prisma, patient_id: str, limit: int = 0):
+    reviewed = await db.review.find_many(
+        where={"patientId": patient_id},
+        select={"therapistId": True},
+    )
+    reviewed_ids = [r.therapistId for r in reviewed]
+
+    where: dict = {
+        "patientId": patient_id,
+        "status": "COMPLETED",
+        "review": None,
+    }
+    if reviewed_ids:
+        where["therapistId"] = {"notIn": reviewed_ids}
+
     sessions = await db.session.find_many(
-        where={
-            "patientId": patient_id,
-            "status": "COMPLETED",
-            "review": None,
-        },
+        where=where,
         include={
             "therapist": True,
         },
@@ -30,6 +40,12 @@ async def create_review(db: Prisma, data: dict):
 
 async def get_review_by_session(db: Prisma, session_id: str):
     return await db.review.find_unique(where={"sessionId": session_id})
+
+
+async def get_review_by_patient_and_therapist(db: Prisma, patient_id: str, therapist_id: str):
+    return await db.review.find_first(
+        where={"patientId": patient_id, "therapistId": therapist_id},
+    )
 
 
 async def get_reviews_for_patient(db: Prisma, patient_id: str, skip=0, limit=100):

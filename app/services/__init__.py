@@ -59,6 +59,7 @@ from app.services.patient import (
 from app.services.review import (
     create_review,
     get_completed_sessions_without_review,
+    get_review_by_patient_and_therapist,
     get_review_by_session,
     get_reviews_for_patient,
 )
