@@ -34,7 +34,7 @@ RUN uv run prisma generate
 # ----------------------------
 # Runtime Stage
 # ----------------------------
-FROM python:3.13-slim-bookworm
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS runtime
 
 WORKDIR /app
 
