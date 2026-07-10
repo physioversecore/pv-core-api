@@ -8,6 +8,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from prisma import Prisma
 
 SESSIONS = [
+    # ── John Doe (patient@test.com) ─────────────────
+    # Today — in progress
+    {
+        "therapist_email": "bibek@test.com",
+        "patient_email": "patient@test.com",
+        "date": datetime(2026, 7, 10),
+        "time": "10:00",
+        "type": "HOME_VISIT",
+        "status": "IN_PROGRESS",
+        "address": "Thamel, Kathmandu",
+        "fee": 1200,
+    },
+    # Upcoming
     {
         "therapist_email": "aarati@test.com",
         "patient_email": "patient@test.com",
@@ -19,25 +32,26 @@ SESSIONS = [
         "fee": 1500,
     },
     {
-        "therapist_email": "aarati@test.com",
-        "patient_email": "ramesh@test.com",
-        "date": datetime(2026, 7, 2),
-        "time": "10:00",
+        "therapist_email": "sushmita@test.com",
+        "patient_email": "patient@test.com",
+        "date": datetime(2026, 7, 12),
+        "time": "09:00",
         "type": "HOME_VISIT",
         "status": "SCHEDULED",
-        "address": "Baluwatar, Kathmandu",
-        "fee": 1500,
+        "address": "Thamel, Kathmandu",
+        "fee": 1400,
     },
     {
-        "therapist_email": "bibek@test.com",
-        "patient_email": "sita@test.com",
-        "date": datetime(2026, 7, 5),
-        "time": "16:00",
+        "therapist_email": "anil@test.com",
+        "patient_email": "patient@test.com",
+        "date": datetime(2026, 7, 15),
+        "time": "14:00",
         "type": "HOME_VISIT",
         "status": "SCHEDULED",
-        "address": "Jhamsikhel, Lalitpur",
-        "fee": 1200,
+        "address": "Thamel, Kathmandu",
+        "fee": 1700,
     },
+    # Completed — variety of therapists
     {
         "therapist_email": "aarati@test.com",
         "patient_email": "patient@test.com",
@@ -97,6 +111,38 @@ SESSIONS = [
         "status": "COMPLETED",
         "address": "Thamel, Kathmandu",
         "fee": 1500,
+    },
+    # Cancelled
+    {
+        "therapist_email": "aarati@test.com",
+        "patient_email": "patient@test.com",
+        "date": datetime(2026, 5, 17),
+        "time": "16:00",
+        "type": "HOME_VISIT",
+        "status": "CANCELLED",
+        "address": "Thamel, Kathmandu",
+        "fee": 1500,
+    },
+    # ── Other patients ─────────────────────────
+    {
+        "therapist_email": "aarati@test.com",
+        "patient_email": "ramesh@test.com",
+        "date": datetime(2026, 7, 2),
+        "time": "10:00",
+        "type": "HOME_VISIT",
+        "status": "SCHEDULED",
+        "address": "Baluwatar, Kathmandu",
+        "fee": 1500,
+    },
+    {
+        "therapist_email": "bibek@test.com",
+        "patient_email": "sita@test.com",
+        "date": datetime(2026, 7, 5),
+        "time": "16:00",
+        "type": "HOME_VISIT",
+        "status": "SCHEDULED",
+        "address": "Jhamsikhel, Lalitpur",
+        "fee": 1200,
     },
     {
         "therapist_email": "aarati@test.com",
