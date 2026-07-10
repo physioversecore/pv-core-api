@@ -1,17 +1,19 @@
 from prisma import Prisma
 
 
+def _enrich_session(s):
+    d = s.model_dump() if hasattr(s, "model_dump") else vars(s)
+    d["therapistName"] = s.therapist.name if hasattr(s, "therapist") and s.therapist else ""
+    return d
+
+
 def _enrich_sessions(sessions: list):
-    result = []
-    for s in sessions:
-        d = s.model_dump() if hasattr(s, "model_dump") else vars(s)
-        d["therapistName"] = s.therapist.name if hasattr(s, "therapist") and s.therapist else ""
-        result.append(d)
-    return result
+    return [_enrich_session(s) for s in sessions]
 
 
 async def create_session(db: Prisma, data: dict):
-    return await db.session.create(data=data)
+    session = await db.session.create(data=data, include={"therapist": True})
+    return _enrich_session(session)
 
 
 async def get_sessions_for_patient(db: Prisma, patient_id: str, skip=0, limit=100):
@@ -47,11 +49,13 @@ async def get_all_sessions(db: Prisma, skip=0, limit=100):
 
 
 async def get_session(db: Prisma, session_id: str):
-    return await db.session.find_unique(where={"id": session_id})
+    session = await db.session.find_unique(where={"id": session_id}, include={"therapist": True})
+    return _enrich_session(session) if session else None
 
 
 async def update_session(db: Prisma, session_id: str, data: dict):
-    return await db.session.update(where={"id": session_id}, data=data)
+    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True})
+    return _enrich_session(session)
 
 
 async def delete_session(db: Prisma, session_id: str):

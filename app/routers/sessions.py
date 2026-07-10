@@ -14,6 +14,7 @@ from app import (
     get_current_user,
     get_db,
     get_or_404,
+    get_session,
     get_sessions_for_patient,
     get_sessions_for_therapist,
     get_therapist_by_user,
@@ -81,9 +82,12 @@ async def list_sessions(
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session_by_id(
     session_id: str,
+    current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    session = await get_or_404(db, "session", session_id)
+    session = await get_session(db, session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return SessionResponse.model_validate(session)
 
 
