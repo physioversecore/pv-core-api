@@ -175,3 +175,9 @@ model CartItem {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 }
+
+model Setting {
+  key       String   @id
+  jsonValue String
+  updatedAt DateTime @updatedAt
+}
