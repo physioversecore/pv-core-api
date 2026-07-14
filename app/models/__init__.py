@@ -8,6 +8,7 @@ from app.models.auth import (
 )
 from app.models.therapist import (
     TherapistCreate,
+    TherapistDashboardResponse,
     TherapistListResponse,
     TherapistResponse,
     TherapistUpdate,

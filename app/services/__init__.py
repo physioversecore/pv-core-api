@@ -11,6 +11,7 @@ from app.services.therapist import (
     delete_therapist,
     get_therapist,
     get_therapist_by_user,
+    get_therapist_dashboard,
     get_therapists,
     update_therapist,
 )
@@ -53,6 +54,7 @@ from app.services.report import (
 )
 from app.services.patient import (
     generate_referral_code,
+    get_my_patients,
     get_patient_dashboard,
     get_patient_referral,
 )

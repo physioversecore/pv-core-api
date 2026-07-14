@@ -7,4 +7,5 @@ from app.routers.reports import router as reports_router
 from app.routers.reviews import router as reviews_router
 from app.routers.sessions import router as sessions_router
 from app.routers.therapists import router as therapists_router
+from app.routers.uploads import router as uploads_router
 from app.routers.patients import router as patients_router

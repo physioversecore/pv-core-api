@@ -5,6 +5,7 @@ from prisma.enums import Role
 from app import (
     PaginationParams,
     TherapistCreate,
+    TherapistDashboardResponse,
     TherapistListResponse,
     TherapistResponse,
     TherapistUpdate,
@@ -14,12 +15,26 @@ from app import (
     get_db,
     get_or_404,
     get_therapist_by_user,
+    get_therapist_dashboard,
     get_therapists,
     pagination_params,
     update_therapist,
 )
 
 router = APIRouter(prefix="/therapists", tags=["Therapists"])
+
+
+@router.get("/me/dashboard", response_model=TherapistDashboardResponse)
+async def dashboard(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if current_user.role != Role.THERAPIST:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    data = await get_therapist_dashboard(db, current_user.id)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return TherapistDashboardResponse(**data)
 
 
 @router.get("", response_model=TherapistListResponse)
