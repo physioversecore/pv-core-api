@@ -105,5 +105,3 @@ from app.routers import (
     sessions_router,
     therapists_router,
 )
-
-
