@@ -4,7 +4,6 @@ from prisma import Prisma
 async def get_completed_sessions_without_review(db: Prisma, patient_id: str, limit: int = 0):
     reviewed = await db.review.find_many(
         where={"patientId": patient_id},
-        select={"therapistId": True},
     )
     reviewed_ids = [r.therapistId for r in reviewed]
 

@@ -77,3 +77,22 @@ async def get_patient_referral(db: Prisma, user_id: str):
 
     link = f"https://sahayatri.np/r/{code}"
     return {"code": code, "link": link}
+
+
+async def get_my_patients(db: Prisma, therapist_user_id: str):
+    therapist = await db.therapist.find_unique(where={"userId": therapist_user_id})
+    if not therapist:
+        return []
+
+    sessions = await db.session.find_many(
+        where={"therapistId": therapist.id},
+    )
+    patient_ids = list({s.patientId for s in sessions})
+    if not patient_ids:
+        return []
+
+    patients = await db.user.find_many(
+        where={"id": {"in": patient_ids}},
+        order={"name": "asc"},
+    )
+    return [{"id": p.id, "name": p.name} for p in patients]

@@ -7,6 +7,7 @@ from app import (
     ReferralResponse,
     get_current_user,
     get_db,
+    get_my_patients,
     get_patient_dashboard,
     get_patient_referral,
 )
@@ -30,3 +31,14 @@ async def referral(
 ):
     data = await get_patient_referral(db, current_user.id)
     return ReferralResponse(**data)
+
+
+@router.get("/my-patients")
+async def my_patients(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if current_user.role != Role.THERAPIST:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Therapist access required")
+    return await get_my_patients(db, current_user.id)

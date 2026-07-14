@@ -44,3 +44,51 @@ class TherapistResponse(BaseModel):
 class TherapistListResponse(BaseModel):
     therapists: list[TherapistResponse]
     total: int
+
+
+class TodaySessionData(BaseModel):
+    id: str
+    time: str
+    patient: str
+    patientId: str
+    address: str
+    type: str
+    status: str
+
+
+class RecentUploadData(BaseModel):
+    id: str
+    patient: str
+    kind: str
+    title: str
+    file: str
+    date: str
+
+
+class PublicProfileData(BaseModel):
+    name: str
+    specialty: str
+    experience: int
+    rating: float
+    totalReviews: int
+
+
+class RecentRatingData(BaseModel):
+    id: str
+    name: str
+    stars: int
+    text: str
+
+
+class TherapistDashboardResponse(BaseModel):
+    name: str
+    sessionsThisWeek: int
+    totalPatients: int
+    earningsThisMonth: float
+    averageRating: float
+    todaySessions: list[TodaySessionData]
+    recentUploads: list[RecentUploadData]
+    publicProfile: PublicProfileData
+    recentRatings: list[RecentRatingData]
+    referralCode: str
+    referralLink: str
