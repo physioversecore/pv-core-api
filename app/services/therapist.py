@@ -92,27 +92,24 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
         for s in today_sessions_raw
     ]
 
-    patient_ids = list({s.patientId for s in all_sessions})
-    recent_reports = []
-    if patient_ids:
-        recent_reports_raw = await db.report.find_many(
-            where={"patientId": {"in": patient_ids[:50]}},
-            include={"patient": True},
-            order={"createdAt": "desc"},
-            take=5,
-        )
-        recent_reports = [
-            {
-                "id": r.id,
-                "patient": r.patient.name if r.patient else "Unknown",
-                "kind": _detect_report_kind(r),
-                "title": r.title,
-                "content": r.content or "",
-                "files": [u.strip() for u in r.fileUrl.split(",") if u.strip()] if r.fileUrl else [],
-                "date": r.createdAt.strftime("%-d %b"),
-            }
-            for r in recent_reports_raw
-        ]
+    recent_reports_raw = await db.report.find_many(
+        where={"therapistId": therapist.id},
+        include={"patient": True},
+        order={"createdAt": "desc"},
+        take=5,
+    )
+    recent_reports = [
+        {
+            "id": r.id,
+            "patient": r.patient.name if r.patient else "Unknown",
+            "kind": _detect_report_kind(r),
+            "title": r.title,
+            "content": r.content or "",
+            "files": [u.strip() for u in r.fileUrl.split(",") if u.strip()] if r.fileUrl else [],
+            "date": r.createdAt.strftime("%-d %b"),
+        }
+        for r in recent_reports_raw
+    ]
 
     recent_reviews_raw = await db.review.find_many(
         where={"therapistId": therapist.id},

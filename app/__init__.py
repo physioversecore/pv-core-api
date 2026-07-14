@@ -71,6 +71,7 @@ from app.services import (
     get_products,
     get_report,
     get_reports_for_patient,
+    get_reports_for_therapist,
     get_review_by_patient_and_therapist,
     get_review_by_session,
     get_reviews_for_patient,

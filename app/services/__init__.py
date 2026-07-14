@@ -50,6 +50,7 @@ from app.services.report import (
     delete_report,
     get_report,
     get_reports_for_patient,
+    get_reports_for_therapist,
     update_report,
 )
 from app.services.patient import (
