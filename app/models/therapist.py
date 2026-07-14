@@ -61,7 +61,8 @@ class RecentUploadData(BaseModel):
     patient: str
     kind: str
     title: str
-    file: str
+    content: str
+    files: list[str]
     date: str
 
 

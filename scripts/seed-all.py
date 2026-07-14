@@ -20,6 +20,7 @@ SCRIPTS = [
     "seed-sessions.py",
     "seed-reports.py",
     "seed-reviews.py",
+    "seed-therapist-dashboard.py"
 ]
 
 

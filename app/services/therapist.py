@@ -107,7 +107,8 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
                 "patient": r.patient.name if r.patient else "Unknown",
                 "kind": _detect_report_kind(r),
                 "title": r.title,
-                "file": r.fileUrl or "",
+                "content": r.content or "",
+                "files": [u.strip() for u in r.fileUrl.split(",") if u.strip()] if r.fileUrl else [],
                 "date": r.createdAt.strftime("%-d %b"),
             }
             for r in recent_reports_raw

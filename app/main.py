@@ -51,8 +51,8 @@ app.include_router(cart_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
-app.include_router(reviews_router, prefix="/api/v1")
 app.include_router(uploads_router, prefix="/api/v1")
+app.include_router(reviews_router, prefix="/api/v1")
 
 
 @app.get("/health")
