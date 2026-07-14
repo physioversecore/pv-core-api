@@ -16,6 +16,23 @@ async def get_reports_for_patient(db: Prisma, patient_id: str, skip=0, limit=100
     return reports, total
 
 
+async def get_reports_for_therapist(db: Prisma, therapist_user_id: str, skip=0, limit=6):
+    therapist = await db.therapist.find_unique(where={"userId": therapist_user_id})
+    if not therapist:
+        return [], 0
+
+    where = {"therapistId": therapist.id}
+    reports = await db.report.find_many(
+        where=where,
+        include={"patient": True},
+        skip=skip,
+        take=limit,
+        order={"createdAt": "desc"},
+    )
+    total = await db.report.count(where=where)
+    return reports, total
+
+
 async def get_report(db: Prisma, report_id: str):
     return await db.report.find_unique(where={"id": report_id})
 

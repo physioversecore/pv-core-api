@@ -15,6 +15,7 @@ from app import (
     get_db,
     get_or_404,
     get_reports_for_patient,
+    get_reports_for_therapist,
     pagination_params,
     update_report,
 )
@@ -77,8 +78,12 @@ async def create_new_report(
         urls = await _save_files(patientId, files)
         fileUrl = urls[0] if len(urls) == 1 else ",".join(urls) if urls else None
 
+        # resolve therapistId from the current user
+        therapist = await db.therapist.find_unique(where={"userId": current_user.id})
+
         report = await create_report(db, {
             "patientId": patientId,
+            **({"therapistId": therapist.id} if therapist else {}),
             "title": title,
             "content": content,
             **({"sessionId": sessionId} if sessionId else {}),
@@ -116,6 +121,43 @@ async def list_reports(
             )
     reports, _ = await get_reports_for_patient(db, pid, **pagination)
     return [ReportResponse.model_validate(r) for r in reports]
+
+
+# ── list reports for therapist (all their patients) ──
+
+
+@router.get("/therapist")
+async def list_therapist_reports(
+    pagination: PaginationParams = Depends(pagination_params),
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if current_user.role not in (Role.THERAPIST, Role.ADMIN):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    reports, total = await get_reports_for_therapist(
+        db, current_user.id, **pagination
+    )
+
+    def _report_to_dict(r):
+        return {
+            "id": r.id,
+            "patientId": r.patientId,
+            "sessionId": r.sessionId,
+            "title": r.title,
+            "content": r.content or "",
+            "fileUrl": r.fileUrl,
+            "patient": r.patient.name if r.patient else "Unknown",
+            "files": [u.strip() for u in r.fileUrl.split(",") if u.strip()] if r.fileUrl else [],
+            "date": r.createdAt.strftime("%-d %b"),
+            "createdAt": r.createdAt.isoformat(),
+            "updatedAt": r.updatedAt.isoformat(),
+        }
+
+    return {
+        "reports": [_report_to_dict(r) for r in reports],
+        "total": total,
+    }
 
 
 # ── single report ──
@@ -157,5 +199,9 @@ async def delete_report_by_id(
 ):
     if current_user.role not in (Role.THERAPIST, Role.ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    await get_or_404(db, "report", report_id)
+    report = await get_or_404(db, "report", report_id)
+    if current_user.role == Role.THERAPIST:
+        therapist = await db.therapist.find_unique(where={"userId": current_user.id})
+        if not therapist or report.therapistId != therapist.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await delete_report(db, report_id)

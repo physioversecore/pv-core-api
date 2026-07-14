@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 class ReportCreate(BaseModel):
     patientId: str
+    therapistId: str | None = None
     sessionId: str | None = None
     title: str
     content: str
@@ -19,6 +20,7 @@ class ReportUpdate(BaseModel):
 class ReportResponse(BaseModel):
     id: str
     patientId: str
+    therapistId: str | None = None
     sessionId: str | None = None
     title: str
     content: str
