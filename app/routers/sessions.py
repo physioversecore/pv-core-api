@@ -99,10 +99,13 @@ async def update_session_by_id(
     db: Prisma = Depends(get_db),
 ):
     session = await get_or_404(db, "session", session_id)
-    if (
-        session.patientId != current_user.id
-        and current_user.role != Role.ADMIN
-    ):
+    if current_user.role == Role.ADMIN:
+        pass
+    elif current_user.role == Role.THERAPIST:
+        therapist = await get_therapist_by_user(db, current_user.id)
+        if not therapist or session.therapistId != therapist.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    elif session.patientId != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     updated = await update_session(
         db, session_id, data.model_dump(exclude_none=True)

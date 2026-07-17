@@ -8,6 +8,7 @@ from app.database import db
 from app.routers import (
     admin_router,
     auth_router,
+    availability_router,
     cart_router,
     patients_router,
     payments_router,
@@ -15,6 +16,7 @@ from app.routers import (
     reports_router,
     reviews_router,
     sessions_router,
+    settings_router,
     therapists_router,
     uploads_router,
 )
@@ -53,6 +55,8 @@ app.include_router(admin_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(uploads_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")
+app.include_router(settings_router, prefix="/api/v1")
+app.include_router(availability_router, prefix="/api/v1")
 
 
 @app.get("/health")
