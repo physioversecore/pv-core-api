@@ -25,6 +25,8 @@ enum SessionStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  RESCHEDULE_REQUESTED
+  DECLINE_REQUESTED
 }
 
 enum SessionType {
@@ -86,6 +88,11 @@ model Therapist {
   sessions Session[]
   reviewedBy Review[]
   createdReports Report[]
+  availabilitySlots AvailabilitySlot[]
+  recurringPatterns RecurringPattern[]
+  availabilityBlocks AvailabilityBlock[]
+  auditLogEntries  AuditLogEntry[]
+  blockRequests ScheduleBlockRequest[]
 }
 
 model Product {
@@ -180,4 +187,73 @@ model Setting {
   key       String   @id
   jsonValue String
   updatedAt DateTime @updatedAt
+}
+
+model AvailabilitySlot {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  date        String
+  time        String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([therapistId, date, time])
+}
+
+model RecurringPattern {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  days        Json
+  sessions    Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AvailabilityBlock {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  dateFrom    String
+  dateTo      String
+  daysOfWeek  Json
+  partsOfDay  Json
+  reason      String
+  notify      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  auditEntry AuditLogEntry[]
+}
+
+model AuditLogEntry {
+  id        String   @id @default(cuid())
+  therapistId String
+  therapist Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  date      String
+  time      String?
+  reason    String
+  scope     String
+  source    String
+  blockId   String?
+  block     AvailabilityBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+}
+
+model ScheduleBlockRequest {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  dateFrom    String
+  dateTo      String
+  daysOfWeek  Json
+  partsOfDay  Json
+  reason      String
+  notify      Boolean  @default(true)
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  adminNotes  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

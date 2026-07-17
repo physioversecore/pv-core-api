@@ -4,6 +4,9 @@ from prisma import Prisma
 def _enrich_session(s):
     d = s.model_dump() if hasattr(s, "model_dump") else vars(s)
     d["therapistName"] = s.therapist.name if hasattr(s, "therapist") and s.therapist else ""
+    patient = getattr(s, "patient", None)
+    d["patientName"] = patient.name if patient else ""
+    d["patientPhone"] = patient.phone if patient else ""
     return d
 
 
@@ -33,10 +36,11 @@ async def get_sessions_for_therapist(db: Prisma, therapist_id: str, skip=0, limi
         where={"therapistId": therapist_id},
         skip=skip,
         take=limit,
-        order={"createdAt": "desc"},
+        order={"date": "asc"},
+        include={"therapist": True, "patient": True},
     )
     total = await db.session.count(where={"therapistId": therapist_id})
-    return sessions, total
+    return _enrich_sessions(sessions), total
 
 
 async def get_all_sessions(db: Prisma, skip=0, limit=100):
@@ -54,7 +58,7 @@ async def get_session(db: Prisma, session_id: str):
 
 
 async def update_session(db: Prisma, session_id: str, data: dict):
-    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True})
+    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True, "patient": True})
     return _enrich_session(session)
 
 

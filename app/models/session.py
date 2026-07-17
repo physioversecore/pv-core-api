@@ -24,6 +24,8 @@ class SessionResponse(BaseModel):
     therapistId: str
     therapistName: str = ""
     patientId: str
+    patientName: str = ""
+    patientPhone: str = ""
     date: datetime
     time: str
     type: str
