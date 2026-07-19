@@ -32,6 +32,9 @@ class WorkingHoursUpdate(BaseModel):
     start: str
     end: str
     slotInterval: int = 120
+    sessionDuration: int = 60
+    breakDuration: int = 0
+    daysOfWeek: list[str] = []
 
 
 class SlotInfo(BaseModel):
@@ -55,6 +58,9 @@ class WorkingHoursResponse(BaseModel):
     start: str
     end: str
     slotInterval: int = 120
+    sessionDuration: int = 60
+    breakDuration: int = 0
+    daysOfWeek: list[str] = []
 
 
 class SlotUpdateResponse(BaseModel):

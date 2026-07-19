@@ -4,7 +4,14 @@ from datetime import datetime, date, timedelta
 
 from prisma import Prisma
 
-DEFAULT_WORKING_HOURS = {"start": "09:00", "end": "18:00", "slotInterval": 60}
+DEFAULT_WORKING_HOURS = {
+    "start": "09:00",
+    "end": "18:00",
+    "slotInterval": 60,
+    "sessionDuration": 60,
+    "breakDuration": 0,
+    "daysOfWeek": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+}
 
 
 def _time_to_minutes(t: str) -> int:
@@ -80,9 +87,10 @@ async def _get_wh(db: Prisma, user_id: str) -> dict:
     if row:
         stored = json.loads(row.jsonValue)
         if stored.get("start") == OLD_DEFAULTS["start"] and stored.get("slotInterval") == OLD_DEFAULTS["slotInterval"]:
-            await _save_wh(db, user_id, DEFAULT_WORKING_HOURS.copy())
-            return DEFAULT_WORKING_HOURS.copy()
-        return stored
+            merged = {**DEFAULT_WORKING_HOURS}
+            await _save_wh(db, user_id, merged)
+            return merged
+        return {**DEFAULT_WORKING_HOURS, **stored}
     return DEFAULT_WORKING_HOURS.copy()
 
 
@@ -409,6 +417,18 @@ async def generate_availability(db: Prisma, therapist_id: str, data: dict) -> di
                 await _upsert_slot(db, therapist_id, dk, t, "open")
                 opened += 1
         current += timedelta(days=1)
+
+    wh_data = {
+        "start": data["startTime"],
+        "end": data["endTime"],
+        "slotInterval": data["sessionDuration"],
+        "sessionDuration": data["sessionDuration"],
+        "breakDuration": data["breakDuration"],
+        "daysOfWeek": data.get("daysOfWeek", []),
+    }
+    therapist = await db.therapist.find_unique(where={"id": therapist_id})
+    user_id = therapist.userId if therapist else therapist_id
+    await _save_wh(db, user_id, wh_data)
 
     return {"updated": opened}
 
