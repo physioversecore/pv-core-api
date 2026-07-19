@@ -404,18 +404,25 @@ async def generate_availability(db: Prisma, therapist_id: str, data: dict) -> di
     times = _generate_time_slots(data["startTime"], data["endTime"], data["sessionDuration"], data["breakDuration"])
 
     opened = 0
+    offed = 0
     current = date_from
     while current <= date_to:
-        if current.isoweekday() % 7 in selected_dows:
-            dk = current.strftime("%Y-%m-%d")
-            for t in times:
-                if _is_past(dk, t):
-                    continue
-                existing = await _find_slot(db, therapist_id, dk, t)
+        dk = current.strftime("%Y-%m-%d")
+        is_selected = current.isoweekday() % 7 in selected_dows
+        for t in times:
+            if _is_past(dk, t):
+                continue
+            existing = await _find_slot(db, therapist_id, dk, t)
+            if is_selected:
                 if existing and existing.status == "booked":
                     continue
                 await _upsert_slot(db, therapist_id, dk, t, "open")
                 opened += 1
+            else:
+                if existing and existing.status == "booked":
+                    continue
+                await _upsert_slot(db, therapist_id, dk, t, "off")
+                offed += 1
         current += timedelta(days=1)
 
     wh_data = {
