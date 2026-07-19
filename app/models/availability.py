@@ -122,6 +122,7 @@ class BlockRangeRequest(BaseModel):
     partsOfDay: list[str]
     reason: str = "Time off"
     notify: bool = True
+    blockType: str = "range"
 
 
 class UnblockRequest(BaseModel):
@@ -159,6 +160,9 @@ class AuditLogEntryResponse(BaseModel):
     scope: str
     source: str
     createdAt: str
+    dateTo: str | None = None
+    daysOfWeek: list[str] = []
+    partsOfDay: list[str] = []
 
 
 class AuditLogCreateRequest(BaseModel):

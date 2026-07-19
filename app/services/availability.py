@@ -442,7 +442,8 @@ async def generate_availability(db: Prisma, therapist_id: str, data: dict) -> di
 
 async def block_range(db: Prisma, therapist_id: str, data: dict) -> dict:
     date_from = date.fromisoformat(data["dateFrom"])
-    date_to = date.fromisoformat(data["dateTo"]) if data.get("dateTo") else date_from
+    raw_date_to = data.get("dateTo")
+    date_to = date.fromisoformat(raw_date_to) if raw_date_to else date_from
     raw_dows = data.get("daysOfWeek", [])
     selected_dows = {_DOW_MAP[d] for d in raw_dows if d in _DOW_MAP}
     parts = data.get("partsOfDay", [])
@@ -451,7 +452,7 @@ async def block_range(db: Prisma, therapist_id: str, data: dict) -> dict:
         data={
             "therapistId": therapist_id,
             "dateFrom": data["dateFrom"],
-            "dateTo": (data.get("dateTo") or data["dateFrom"]),
+            "dateTo": raw_date_to if raw_date_to else data["dateFrom"],
             "daysOfWeek": json.dumps(raw_dows),
             "partsOfDay": json.dumps(parts),
             "reason": data.get("reason", ""),
@@ -496,12 +497,13 @@ async def block_range(db: Prisma, therapist_id: str, data: dict) -> dict:
                 blocked += 1
         current += timedelta(days=1)
 
+    block_type = data.get("blockType", "range")
     await db.auditlogentry.create(
         data={
             "therapistId": therapist_id,
             "date": data["dateFrom"],
             "reason": data["reason"],
-            "scope": "range",
+            "scope": block_type,
             "source": "block_range",
             "blockId": block.id,
         }
@@ -639,6 +641,7 @@ async def get_audit_entries(db: Prisma, therapist_id: str, limit: int = 8) -> li
         where={"therapistId": therapist_id},
         order={"createdAt": "desc"},
         take=limit,
+        include={"block": True},
     )
     return [
         {
@@ -649,6 +652,9 @@ async def get_audit_entries(db: Prisma, therapist_id: str, limit: int = 8) -> li
             "scope": r.scope,
             "source": r.source,
             "createdAt": r.createdAt.isoformat(),
+            "dateTo": r.block.dateTo if r.block else None,
+            "daysOfWeek": _parse_json_list(r.block.daysOfWeek) if r.block and r.block.daysOfWeek else [],
+            "partsOfDay": _parse_json_list(r.block.partsOfDay) if r.block and r.block.partsOfDay else [],
         }
         for r in rows
     ]
