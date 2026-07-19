@@ -16,6 +16,7 @@ from app import (
     MonthlyGridResponse,
     OpenFullMonthRequest,
     OpenMonthResponse,
+    PaginatedAuditLogResponse,
     RecurringApplyResponse,
     RecurringPatternCreate,
     RecurringPatternListResponse,
@@ -244,14 +245,15 @@ async def get_working_days_endpoint(
     return await get_working_days(db, therapist.id)
 
 
-@router.get("/audit-log", response_model=list[AuditLogEntryResponse])
+@router.get("/audit-log", response_model=PaginatedAuditLogResponse)
 async def list_audit(
-    limit: int = 8,
+    limit: int = 5,
+    offset: int = 0,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     therapist = await _resolve_therapist(current_user, db)
-    return await get_audit_entries(db, therapist.id, limit)
+    return await get_audit_entries(db, therapist.id, limit, offset)
 
 
 @router.post("/audit-log", response_model=AuditLogEntryResponse)

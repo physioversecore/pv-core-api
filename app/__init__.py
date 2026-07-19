@@ -23,6 +23,7 @@ from app.models import (
     NextSessionInfo,
     OpenFullMonthRequest,
     OpenMonthResponse,
+    PaginatedAuditLogResponse,
     PatientDashboardResponse,
     PaymentCreate,
     PaymentListResponse,

@@ -165,6 +165,11 @@ class AuditLogEntryResponse(BaseModel):
     partsOfDay: list[str] = []
 
 
+class PaginatedAuditLogResponse(BaseModel):
+    entries: list[AuditLogEntryResponse]
+    total: int
+
+
 class AuditLogCreateRequest(BaseModel):
     date: str
     time: str | None = None

@@ -636,14 +636,17 @@ async def get_working_days(db: Prisma, therapist_id: str) -> list[str]:
     return sorted(days_set, key=lambda x: list(dow_names.values()).index(x))
 
 
-async def get_audit_entries(db: Prisma, therapist_id: str, limit: int = 8) -> list[dict]:
+async def get_audit_entries(db: Prisma, therapist_id: str, limit: int = 5, offset: int = 0) -> dict:
+    where = {"therapistId": therapist_id}
+    total = await db.auditlogentry.count(where=where)
     rows = await db.auditlogentry.find_many(
-        where={"therapistId": therapist_id},
+        where=where,
         order={"createdAt": "desc"},
         take=limit,
+        skip=offset,
         include={"block": True},
     )
-    return [
+    entries = [
         {
             "id": r.id,
             "date": r.date,
@@ -658,6 +661,7 @@ async def get_audit_entries(db: Prisma, therapist_id: str, limit: int = 8) -> li
         }
         for r in rows
     ]
+    return {"entries": entries, "total": total}
 
 
 async def create_audit_entry(db: Prisma, therapist_id: str, data: dict) -> dict:

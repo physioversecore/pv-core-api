@@ -66,6 +66,7 @@ from app.models.availability import (
     MonthlyGridResponse,
     OpenFullMonthRequest,
     OpenMonthResponse,
+    PaginatedAuditLogResponse,
     RecurringApplyResponse,
     RecurringPatternCreate,
     RecurringPatternListResponse,
