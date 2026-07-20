@@ -4,6 +4,7 @@ from prisma.enums import Role
 
 from app import (
     PaginationParams,
+    SlotRangeResponse,
     TherapistCreate,
     TherapistDashboardResponse,
     TherapistListResponse,
@@ -17,6 +18,7 @@ from app import (
     get_therapist_by_user,
     get_therapist_dashboard,
     get_therapists,
+    get_slots_for_range,
     pagination_params,
     update_therapist,
 )
@@ -60,6 +62,18 @@ async def my_profile(
     if not therapist:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return TherapistResponse.model_validate(therapist)
+
+
+@router.get("/{therapist_id}/slots", response_model=SlotRangeResponse)
+async def get_therapist_slots(
+    therapist_id: str,
+    from_date: str,
+    to_date: str,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    therapist = await get_or_404(db, "therapist", therapist_id)
+    return await get_slots_for_range(db, therapist.id, from_date, to_date)
 
 
 @router.get("/{therapist_id}", response_model=TherapistResponse)

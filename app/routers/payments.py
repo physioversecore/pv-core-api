@@ -3,22 +3,78 @@ from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    BookingPaymentRequest,
+    BookingPaymentResponse,
     PaginationParams,
     PaymentCreate,
     PaymentListResponse,
     PaymentResponse,
+    SessionPaymentResponse,
     create_payment,
+    create_session,
     get_admin_user,
     get_all_payments,
     get_current_user,
     get_db,
     get_or_404,
     get_payments_for_user,
+    get_therapist_by_user,
     pagination_params,
     update_payment,
 )
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
+
+
+@router.post(
+    "/process",
+    response_model=BookingPaymentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def process_booking_payment(
+    data: BookingPaymentRequest,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if current_user.role != Role.PATIENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    session = await create_session(
+        db,
+        {
+            "therapistId": data.therapistId,
+            "patientId": current_user.id,
+            "date": data.date,
+            "time": data.time,
+            "type": data.type.upper(),
+            "address": data.address,
+            "fee": data.fee,
+            "notes": data.notes,
+        },
+    )
+
+    payment = await create_payment(
+        db,
+        {
+            "userId": current_user.id,
+            "amount": data.fee + data.platformFee,
+            "method": data.paymentMethod.upper(),
+            "sessionId": session["id"],
+            "currency": data.currency,
+            "platformFee": data.platformFee,
+            "paymentType": data.paymentType,
+            "transactionRef": data.transactionRef,
+            "cardLast4": data.cardLast4,
+            "walletMobile": data.walletMobile,
+            "billingCountry": data.billingCountry,
+            "status": "COMPLETED",
+        },
+    )
+
+    return BookingPaymentResponse(
+        session=SessionPaymentResponse.model_validate(session),
+        payment=PaymentResponse.model_validate(payment),
+    )
 
 
 @router.post(
@@ -38,6 +94,13 @@ async def make_payment(
             "amount": data.amount,
             "method": data.method,
             "sessionId": data.sessionId,
+            "currency": data.currency,
+            "platformFee": data.platformFee,
+            "paymentType": data.paymentType,
+            "transactionRef": data.transactionRef,
+            "cardLast4": data.cardLast4,
+            "walletMobile": data.walletMobile,
+            "billingCountry": data.billingCountry,
         },
     )
     return PaymentResponse.model_validate(payment)

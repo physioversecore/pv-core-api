@@ -13,6 +13,7 @@ from app import (
     BlockRangeResponse,
     BulkSlotUpdate,
     GenerateAvailabilityRequest,
+    get_therapist,
     MonthlyGridResponse,
     OpenFullMonthRequest,
     OpenMonthResponse,
@@ -229,11 +230,17 @@ async def unblock_time(
 async def get_slots_range(
     from_date: str,
     to_date: str,
+    therapist_id: str | None = None,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    therapist = await _resolve_therapist(current_user, db)
-    return await get_slots_for_range(db, therapist.id, from_date, to_date)
+    if therapist_id:
+        target = await get_therapist(db, therapist_id)
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Therapist not found")
+    else:
+        target = await _resolve_therapist(current_user, db)
+    return await get_slots_for_range(db, target.id, from_date, to_date)
 
 
 @router.get("/working-days")

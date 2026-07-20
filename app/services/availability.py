@@ -122,7 +122,7 @@ async def get_monthly_availability(
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
     user_id = therapist.userId if therapist else therapist_id
     wh = await _get_wh(db, user_id)
-    times = _generate_slots(wh["start"], wh["end"], wh["slotInterval"])
+    times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     days_in_month = calendar.monthrange(year, month)[1]
 
     rows = await db.availabilityslot.find_many(
@@ -191,7 +191,7 @@ async def apply_recurring_pattern(db: Prisma, therapist_id: str, data: dict) -> 
     now = datetime.now()
     year, month = now.year, now.month
     days_in_month = calendar.monthrange(year, month)[1]
-    times = _generate_slots(wh["start"], wh["end"], wh["slotInterval"])
+    times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
 
     pattern = await db.recurringpattern.create(
         data={"therapistId": therapist_id, "days": json.dumps(days), "sessions": json.dumps(sessions_list)}
@@ -250,7 +250,7 @@ async def toggle_recurring_pattern(
 
 async def apply_schedule(db: Prisma, user_id: str, data: dict) -> dict:
     wh = await _get_wh(db, user_id)
-    times = _generate_slots(wh["start"], wh["end"], wh["slotInterval"])
+    times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     recurrence = data.get("recurrence", "weekly")
     date_from = data.get("dateFrom")
     date_to = data.get("dateTo")
@@ -311,7 +311,7 @@ async def open_full_month(db: Prisma, therapist_id: str, data: dict) -> dict:
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
     user_id = therapist.userId if therapist else therapist_id
     wh = await _get_wh(db, user_id)
-    times = _generate_slots(wh["start"], wh["end"], wh["slotInterval"])
+    times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     days_in_month = calendar.monthrange(year, month)[1]
 
     opened = skipped_booked = skipped_past = 0
@@ -342,7 +342,7 @@ async def block_date(db: Prisma, therapist_id: str, data: dict) -> dict:
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
     user_id = therapist.userId if therapist else therapist_id
     wh = await _get_wh(db, user_id)
-    times = _generate_slots(wh["start"], wh["end"], wh["slotInterval"])
+    times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     blocked = 0
 
     for t in times:
@@ -549,12 +549,18 @@ async def get_slots_for_range(db: Prisma, therapist_id: str, date_from: str, dat
     d_from = date.fromisoformat(date_from)
     d_to = date.fromisoformat(date_to)
 
+    therapist = await db.therapist.find_unique(where={"id": therapist_id})
+    user_id = therapist.userId if therapist else therapist_id
+    wh = await _get_wh(db, user_id)
+    times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
+
     slot_rows = await db.availabilityslot.find_many(
         where={
             "therapistId": therapist_id,
             "date": {"gte": date_from, "lte": date_to},
         }
     )
+    slot_map = {_slot_key(r.date, r.time): r for r in slot_rows}
 
     sessions = await db.session.find_many(
         where={
@@ -580,28 +586,33 @@ async def get_slots_for_range(db: Prisma, therapist_id: str, date_from: str, dat
     )
 
     slots: list[dict] = []
-    for row in slot_rows:
-        key = _slot_key(row.date, row.time)
-        sess = session_map.get(key)
-        if sess:
-            patient = getattr(sess, "patient", None)
-            slots.append({
-                "date": row.date,
-                "time": row.time,
-                "status": "booked",
-                "patientName": patient.name if patient else "",
-                "patientPhone": patient.phone if patient else "",
-                "sessionType": _session_period(row.time),
-                "fee": sess.fee,
-                "sessionId": sess.id,
-            })
-        else:
-            slots.append({
-                "date": row.date,
-                "time": row.time,
-                "status": row.status,
-                "sessionType": _session_period(row.time),
-            })
+    current = d_from
+    while current <= d_to:
+        dk = current.strftime("%Y-%m-%d")
+        for t in times:
+            key = _slot_key(dk, t)
+            sess = session_map.get(key)
+            if sess:
+                patient = getattr(sess, "patient", None)
+                slots.append({
+                    "date": dk,
+                    "time": t,
+                    "status": "booked",
+                    "patientName": patient.name if patient else "",
+                    "patientPhone": patient.phone if patient else "",
+                    "sessionType": _session_period(t),
+                    "fee": sess.fee,
+                    "sessionId": sess.id,
+                })
+            else:
+                row = slot_map.get(key)
+                slots.append({
+                    "date": dk,
+                    "time": t,
+                    "status": row.status if row else "open",
+                    "sessionType": _session_period(t),
+                })
+        current += timedelta(days=1)
 
     blocks = [
         {
