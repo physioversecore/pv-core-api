@@ -14,6 +14,7 @@ from app.models.therapist import (
     TherapistUpdate,
 )
 from app.models.session import (
+    RescheduleRequest,
     SessionCreate,
     SessionListResponse,
     SessionResponse,

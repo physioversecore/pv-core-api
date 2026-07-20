@@ -22,6 +22,7 @@ from app.services.session import (
     get_session,
     get_sessions_for_patient,
     get_sessions_for_therapist,
+    reschedule_session,
     update_session,
 )
 from app.services.product import (

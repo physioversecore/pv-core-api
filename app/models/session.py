@@ -43,3 +43,8 @@ class SessionResponse(BaseModel):
 class SessionListResponse(BaseModel):
     sessions: list[SessionResponse]
     total: int
+
+
+class RescheduleRequest(BaseModel):
+    newDate: str
+    newTime: str

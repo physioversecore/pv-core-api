@@ -4,6 +4,7 @@ from prisma.enums import Role
 
 from app import (
     PaginationParams,
+    RescheduleRequest,
     SessionCreate,
     SessionListResponse,
     SessionResponse,
@@ -19,6 +20,7 @@ from app import (
     get_sessions_for_therapist,
     get_therapist_by_user,
     pagination_params,
+    reschedule_session,
     update_session,
 )
 
@@ -49,6 +51,31 @@ async def book_session(
         },
     )
     return SessionResponse.model_validate(session)
+
+
+@router.patch("/{session_id}/reschedule", response_model=SessionResponse)
+async def reschedule_session_by_id(
+    session_id: str,
+    data: RescheduleRequest,
+    current_user=Depends(get_current_user),
+    db: Prisma =Depends(get_db),
+):
+    if current_user.role != Role.PATIENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    updated, error = await reschedule_session(
+        db, session_id, current_user.id, data.newDate, data.newTime
+    )
+    if error == "CONFLICT":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That slot was just booked — please choose another.",
+        )
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=error
+        )
+    return SessionResponse.model_validate(updated)
 
 
 @router.get("", response_model=SessionListResponse)
