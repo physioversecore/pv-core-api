@@ -42,6 +42,11 @@ class AdminTherapistData(BaseModel):
     isActive: bool
     phone: str | None = None
     email: str | None = None
+    gender: str | None = None
+    price: float | None = None
+    experience: int | None = None
+    bio: str | None = None
+    mediaUrls: str | None = None
 
     class Config:
         from_attributes = True

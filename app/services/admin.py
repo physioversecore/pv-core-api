@@ -87,6 +87,11 @@ async def get_admin_therapists(
             "isActive": u.status == "APPROVED",
             "phone": u.phone,
             "email": u.email,
+            "gender": t.gender if t else None,
+            "price": t.price if t else None,
+            "experience": t.experience if t else None,
+            "bio": t.bio if t else None,
+            "mediaUrls": t.mediaUrls if t else None,
         })
 
     if needs_post_sort:
@@ -117,6 +122,11 @@ async def get_admin_therapist(db: Prisma, therapist_id: str):
         "isActive": u.status == "APPROVED",
         "phone": u.phone,
         "email": u.email,
+        "gender": t.gender,
+        "price": t.price,
+        "experience": t.experience,
+        "bio": t.bio,
+        "mediaUrls": t.mediaUrls,
     }
 
 
