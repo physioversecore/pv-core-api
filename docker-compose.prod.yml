@@ -36,5 +36,20 @@ services:
       sh -c "uv run prisma db push && python main.py"
     restart: unless-stopped
 
+  radis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --appendfsync everysec  --save 60 1000
+    volumes:
+      - redis-data:/data
+
+
+
 volumes:
+  redis-data:
+      driver: local
   pgdata:
+    driver: local

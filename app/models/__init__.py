@@ -59,7 +59,13 @@ from app.models.review import (
 from app.models.admin import (
     AdminDashboardStats,
     AdminEarningsResponse,
+    AdminPatientData,
+    AdminPatientListResponse,
+    AdminPatientUpdate,
     AdminRecentActivity,
+    AdminTherapistData,
+    AdminTherapistListResponse,
+    AdminTherapistUpdate,
 )
 from app.models.availability import (
     ApplyScheduleRequest,

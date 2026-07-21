@@ -10,11 +10,29 @@ from app import (
     get_or_404,
     pagination_params,
 )
-from app.models.admin import AdminDashboardStats, AdminEarningsResponse, AdminRecentActivity
+from app.models.admin import (
+    AdminDashboardStats,
+    AdminEarningsResponse,
+    AdminPatientData,
+    AdminPatientListResponse,
+    AdminPatientUpdate,
+    AdminRecentActivity,
+    AdminTherapistData,
+    AdminTherapistListResponse,
+    AdminTherapistUpdate,
+)
 from app.services.admin import (
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_patient,
+    get_admin_patients,
     get_admin_recent_activity,
+    get_admin_therapist,
+    get_admin_therapists,
+    update_admin_therapist,
+    delete_admin_therapist,
+    update_admin_patient,
+    delete_admin_patient,
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -51,6 +69,33 @@ async def update_user_status(
     return UserResponse.model_validate(updated)
 
 
+@router.get("/therapists", response_model=AdminTherapistListResponse)
+async def list_therapists_admin(
+    skip: int = 0,
+    limit: int = 10,
+    search: str | None = None,
+    specialty: str | None = None,
+    status: str | None = None,
+    city: str | None = None,
+    sortBy: str | None = None,
+    sortOrder: str = "asc",
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    items, total = await get_admin_therapists(
+        db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        specialty=specialty,
+        status=status,
+        city=city,
+        sort_by=sortBy,
+        sort_order=sortOrder,
+    )
+    return AdminTherapistListResponse(items=items, total=total)
+
+
 @router.get("/therapists/pending", response_model=list[UserResponse])
 async def list_pending_therapists(
     _=Depends(get_admin_user),
@@ -61,6 +106,113 @@ async def list_pending_therapists(
         order={"createdAt": "desc"},
     )
     return [UserResponse.model_validate(u) for u in users]
+
+
+@router.get("/therapists/{therapist_id}", response_model=AdminTherapistData)
+async def get_therapist_admin(
+    therapist_id: str,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    result = await get_admin_therapist(db, therapist_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return result
+
+
+@router.put("/therapists/{therapist_id}", response_model=AdminTherapistData)
+async def update_therapist_admin(
+    therapist_id: str,
+    data: AdminTherapistUpdate,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    result = await update_admin_therapist(
+        db, therapist_id, data.model_dump(exclude_none=True)
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return result
+
+
+@router.delete("/therapists/{therapist_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_therapist_admin(
+    therapist_id: str,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    deleted = await delete_admin_therapist(db, therapist_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
+@router.get("/patients", response_model=AdminPatientListResponse)
+async def list_patients_admin(
+    skip: int = 0,
+    limit: int = 10,
+    search: str | None = None,
+    dateFrom: str | None = None,
+    dateTo: str | None = None,
+    status: str | None = None,
+    city: str | None = None,
+    therapistId: str | None = None,
+    sortBy: str | None = None,
+    sortOrder: str = "asc",
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    items, total = await get_admin_patients(
+        db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        date_from=dateFrom,
+        date_to=dateTo,
+        status=status,
+        city=city,
+        therapist_id=therapistId,
+        sort_by=sortBy,
+        sort_order=sortOrder,
+    )
+    return AdminPatientListResponse(items=items, total=total)
+
+
+@router.get("/patients/{patient_id}", response_model=AdminPatientData)
+async def get_patient_admin(
+    patient_id: str,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    result = await get_admin_patient(db, patient_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return result
+
+
+@router.put("/patients/{patient_id}", response_model=AdminPatientData)
+async def update_patient_admin(
+    patient_id: str,
+    data: AdminPatientUpdate,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    result = await update_admin_patient(
+        db, patient_id, data.model_dump(exclude_none=True)
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return result
+
+
+@router.delete("/patients/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_patient_admin(
+    patient_id: str,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    deleted = await delete_admin_patient(db, patient_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
 
 @router.get("/dashboard/stats", response_model=AdminDashboardStats)

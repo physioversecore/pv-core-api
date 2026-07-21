@@ -68,9 +68,17 @@ from app.services.review import (
     get_reviews_for_patient,
 )
 from app.services.admin import (
+    delete_admin_patient,
+    delete_admin_therapist,
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_patient,
+    get_admin_patients,
     get_admin_recent_activity,
+    get_admin_therapist,
+    get_admin_therapists,
+    update_admin_patient,
+    update_admin_therapist,
 )
 from app.services.availability import (
     apply_recurring_pattern,

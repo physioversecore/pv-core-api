@@ -28,3 +28,64 @@ class AdminRecentActivity(_CamelModel):
     therapist_name: str
     type: str
     timestamp: str
+
+
+class AdminTherapistData(BaseModel):
+    id: str
+    name: str
+    city: str
+    specialty: str
+    rating: float
+    sessions: int
+    status: str
+    joined: str
+    isActive: bool
+    phone: str | None = None
+    email: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminTherapistListResponse(BaseModel):
+    items: list[AdminTherapistData]
+    total: int
+
+
+class AdminTherapistUpdate(BaseModel):
+    name: str | None = None
+    city: str | None = None
+    specialty: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    status: str | None = None
+    isActive: bool | None = None
+
+
+class AdminPatientData(BaseModel):
+    id: str
+    name: str
+    city: str
+    sessions: int
+    therapist: str
+    therapistId: str
+    joined: str
+    isActive: bool
+    phone: str | None = None
+    email: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminPatientListResponse(BaseModel):
+    items: list[AdminPatientData]
+    total: int
+
+
+class AdminPatientUpdate(BaseModel):
+    name: str | None = None
+    city: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    isActive: bool | None = None
