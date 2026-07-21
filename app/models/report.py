@@ -1,20 +1,20 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ReportCreate(BaseModel):
-    patientId: str
-    therapistId: str | None = None
-    sessionId: str | None = None
-    title: str
-    content: str
-    fileUrl: str | None = None
+    patientId: str = Field(min_length=1, max_length=64)
+    therapistId: str | None = Field(default=None, max_length=64)
+    sessionId: str | None = Field(default=None, max_length=64)
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=10000)
+    fileUrl: str | None = Field(default=None, max_length=4000)
 
 
 class ReportUpdate(BaseModel):
-    title: str | None = None
-    content: str | None = None
-    fileUrl: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    content: str | None = Field(default=None, max_length=10000)
+    fileUrl: str | None = Field(default=None, max_length=4000)
 
 
 class ReportResponse(BaseModel):

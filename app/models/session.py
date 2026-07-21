@@ -1,22 +1,22 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SessionCreate(BaseModel):
-    therapistId: str
+    therapistId: str = Field(min_length=1, max_length=64)
     date: datetime
-    time: str
-    type: str = "HOME_VISIT"
-    address: str
-    fee: float
-    notes: str | None = None
+    time: str = Field(min_length=1, max_length=10)
+    type: str = Field(default="HOME_VISIT", max_length=32)
+    address: str = Field(min_length=1, max_length=500)
+    fee: float = Field(ge=0, le=1000000)
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class SessionUpdate(BaseModel):
-    status: str | None = None
+    status: str | None = Field(default=None, max_length=32)
     date: datetime | None = None
-    time: str | None = None
-    notes: str | None = None
+    time: str | None = Field(default=None, max_length=10)
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class SessionResponse(BaseModel):
@@ -46,5 +46,5 @@ class SessionListResponse(BaseModel):
 
 
 class RescheduleRequest(BaseModel):
-    newDate: str
-    newTime: str
+    newDate: str = Field(min_length=1, max_length=20)
+    newTime: str = Field(min_length=1, max_length=10)

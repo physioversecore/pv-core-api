@@ -67,6 +67,12 @@ model User {
   reports     Report[]
   cartItems   CartItem[]
   payments    Payment[]
+
+  @@index([role])
+  @@index([status])
+  @@index([city])
+  @@index([referralCode])
+  @@index([role, status])
 }
 
 model Therapist {
@@ -94,6 +100,10 @@ model Therapist {
   availabilityBlocks AvailabilityBlock[]
   auditLogEntries  AuditLogEntry[]
   blockRequests ScheduleBlockRequest[]
+
+  @@index([city])
+  @@index([specialty])
+  @@index([city, specialty])
 }
 
 model Product {
@@ -129,6 +139,14 @@ model Session {
   updatedAt   DateTime      @updatedAt
 
   review Review?
+
+  @@index([patientId])
+  @@index([therapistId])
+  @@index([status])
+  @@index([date])
+  @@index([patientId, status])
+  @@index([therapistId, status])
+  @@index([therapistId, date])
 }
 
 model Review {
@@ -143,6 +161,10 @@ model Review {
   comment     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([therapistId])
+  @@index([patientId, therapistId])
 }
 
 model Report {
@@ -157,6 +179,10 @@ model Report {
   fileUrl     String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([patientId])
+  @@index([therapistId])
+  @@index([sessionId])
 }
 
 model Payment {
@@ -176,6 +202,11 @@ model Payment {
   billingCountry String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([userId, status])
 }
 
 model CartItem {
@@ -189,6 +220,8 @@ model CartItem {
   rentalDays Int          @default(7)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
+
+  @@index([userId])
 }
 
 model Setting {
@@ -248,6 +281,9 @@ model AuditLogEntry {
   blockId   String?
   block     AvailabilityBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
+
+  @@index([therapistId])
+  @@index([date])
 }
 
 model ScheduleBlockRequest {
@@ -264,4 +300,8 @@ model ScheduleBlockRequest {
   adminNotes  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([therapistId])
+  @@index([status])
+  @@index([therapistId, status])
 }

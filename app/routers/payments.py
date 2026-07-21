@@ -127,9 +127,12 @@ async def list_payments(
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment_by_id(
     payment_id: str,
+    current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     payment = await get_or_404(db, "payment", payment_id)
+    if current_user.role != Role.ADMIN and payment.userId != current_user.id:
+        raise HTTPException(status_code=404, detail="Payment not found")
     return PaymentResponse.model_validate(payment)
 
 

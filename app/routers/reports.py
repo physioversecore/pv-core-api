@@ -24,22 +24,35 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 REPORTS_ROOT = Path(__file__).resolve().parent.parent.parent / "Upload" / "Reports"
 
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx"}
 
-# ── helpers ──
+
+def _sanitize_id(value: str) -> str:
+    safe = Path(value).name
+    if safe != value or ".." in value or "/" in value or "\\" in value:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+    return safe
 
 
 async def _save_files(patient_id: str, files: list[UploadFile]) -> list[str]:
-    """Save uploaded files and return their URL paths with original names."""
+    patient_id = _sanitize_id(patient_id)
     patient_dir = REPORTS_ROOT / patient_id
-    patient_dir.mkdir(parents=True, exist_ok=True)
+    patient_dir.mkdir(parents=False, exist_ok=True)
 
     urls: list[str] = []
     for f in files:
-        ext = Path(f.filename or "file").suffix
+        ext = Path(f.filename or "file").suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed")
+
+        content = await f.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="File exceeds 10MB limit")
+
         filename = f"{uuid.uuid4().hex}{ext}"
         dest = patient_dir / filename
 
-        content = await f.read()
         with open(dest, "wb") as out:
             out.write(content)
 
@@ -166,9 +179,16 @@ async def list_therapist_reports(
 @router.get("/{report_id}", response_model=ReportResponse)
 async def get_report_by_id(
     report_id: str,
+    current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     report = await get_or_404(db, "report", report_id)
+    if current_user.role == Role.PATIENT and report.patientId != current_user.id:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if current_user.role == Role.THERAPIST:
+        therapist = await db.therapist.find_unique(where={"userId": current_user.id})
+        if not therapist or report.therapistId != therapist.id:
+            raise HTTPException(status_code=404, detail="Report not found")
     return ReportResponse.model_validate(report)
 
 
@@ -184,7 +204,11 @@ async def update_report_by_id(
 ):
     if current_user.role not in (Role.THERAPIST, Role.ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    await get_or_404(db, "report", report_id)
+    report = await get_or_404(db, "report", report_id)
+    if current_user.role == Role.THERAPIST:
+        therapist = await db.therapist.find_unique(where={"userId": current_user.id})
+        if not therapist or report.therapistId != therapist.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     updated = await update_report(
         db, report_id, data.model_dump(exclude_none=True)
     )

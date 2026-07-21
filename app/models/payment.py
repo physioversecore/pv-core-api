@@ -1,18 +1,18 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PaymentCreate(BaseModel):
-    amount: float
-    method: str = "CASH"
-    sessionId: str | None = None
-    currency: str = "NPR"
-    platformFee: float = 0
-    paymentType: str | None = None
-    transactionRef: str | None = None
-    cardLast4: str | None = None
-    walletMobile: str | None = None
-    billingCountry: str | None = None
+    amount: float = Field(ge=0, le=1000000)
+    method: str = Field(default="CASH", max_length=32)
+    sessionId: str | None = Field(default=None, max_length=64)
+    currency: str = Field(default="NPR", max_length=8)
+    platformFee: float = Field(default=0, ge=0, le=1000000)
+    paymentType: str | None = Field(default=None, max_length=32)
+    transactionRef: str | None = Field(default=None, max_length=128)
+    cardLast4: str | None = Field(default=None, max_length=4)
+    walletMobile: str | None = Field(default=None, max_length=20)
+    billingCountry: str | None = Field(default=None, max_length=8)
 
 
 class PaymentResponse(BaseModel):
@@ -42,21 +42,21 @@ class PaymentListResponse(BaseModel):
 
 
 class BookingPaymentRequest(BaseModel):
-    therapistId: str
+    therapistId: str = Field(min_length=1, max_length=64)
     date: datetime
-    time: str
-    type: str = "HOME_VISIT"
-    address: str
-    fee: float
-    notes: str | None = None
-    currency: str = "NPR"
-    paymentMethod: str = "CASH"
-    paymentType: str | None = None
-    platformFee: float = 0
-    transactionRef: str | None = None
-    cardLast4: str | None = None
-    walletMobile: str | None = None
-    billingCountry: str | None = None
+    time: str = Field(min_length=1, max_length=10)
+    type: str = Field(default="HOME_VISIT", max_length=32)
+    address: str = Field(min_length=1, max_length=500)
+    fee: float = Field(ge=0, le=1000000)
+    notes: str | None = Field(default=None, max_length=2000)
+    currency: str = Field(default="NPR", max_length=8)
+    paymentMethod: str = Field(default="CASH", max_length=32)
+    paymentType: str | None = Field(default=None, max_length=32)
+    platformFee: float = Field(default=0, ge=0, le=1000000)
+    transactionRef: str | None = Field(default=None, max_length=128)
+    cardLast4: str | None = Field(default=None, max_length=4)
+    walletMobile: str | None = Field(default=None, max_length=20)
+    billingCountry: str | None = Field(default=None, max_length=8)
 
 
 class SessionPaymentResponse(BaseModel):

@@ -1,3 +1,5 @@
+import json
+
 from pydantic_settings import BaseSettings
 
 
@@ -15,8 +17,14 @@ class Settings(BaseSettings):
     rate_limit_default_window: int = 60
     rate_limit_storage_backend: str = "redis"
 
+    cors_origins: str = '["*"]'
+
     class Config:
         env_file = ".env"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return json.loads(self.cors_origins)
 
 
 settings = Settings()

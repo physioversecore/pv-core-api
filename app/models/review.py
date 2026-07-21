@@ -1,11 +1,11 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ReviewCreate(BaseModel):
-    sessionId: str
-    rating: int
-    comment: str | None = None
+    sessionId: str = Field(min_length=1, max_length=64)
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
 
 
 class TherapistToRate(BaseModel):
