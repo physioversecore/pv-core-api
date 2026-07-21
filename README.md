@@ -12,6 +12,7 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python**, **F
 - Payment tracking
 - Patient progress reports
 - Admin dashboard (manage users, therapists, sessions, payments)
+- Distributed rate limiting (Redis-backed Sliding Window Counter)
 - Auto-generated Swagger docs & ReDoc
 
 ---
@@ -24,6 +25,7 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python**, **F
 | Framework | FastAPI |
 | ORM | Prisma (Python) |
 | Database | PostgreSQL 16 |
+| Cache/Rate Limiting | Redis 7 |
 | Auth | JWT (python-jose) + bcrypt |
 | Package mgr | uv |
 
@@ -124,25 +126,28 @@ All endpoints are under `/api/v1/`.
 ```
 main.py                  # CLI entrypoint (uvicorn, reload via env var)
 app/
-  main.py                # FastAPI app, CORS, lifespan, router includes
-  config.py              # pydantic-settings (reads .env)
+  main.py                # FastAPI app, CORS, lifespan, router includes, rate limit middleware
+  config.py              # pydantic-settings (reads .env) — includes Redis & rate limit config
   database.py            # Prisma client singleton
   deps.py                # JWT auth dependencies
   models/                # Pydantic request/response schemas
-    auth.py, therapist.py, session.py, product.py,
-    cart.py, payment.py, report.py
   routers/               # API route handlers
-    auth.py, therapists.py, sessions.py, products.py,
-    cart.py, payments.py, admin.py, reports.py
   services/              # Business logic layer
-    auth.py, therapist.py, session.py, product.py,
-    cart.py, payment.py, report.py
+  rate_limit/            # Distributed rate limiting system (Redis-backed)
+    config.py            # Rate limiting rules & configuration
+    storage.py           # Redis + Memory storage backends
+    algorithms.py        # Sliding Window Counter + Token Bucket
+    lua_scripts.py       # Atomic Redis Lua scripts
+    middleware.py         # Global ASGI middleware
+    dependencies.py      # Route-level FastAPI dependency
+    access_list.py       # Whitelist/blacklist with TTL
+    metrics.py           # Prometheus-compatible metrics
 prisma/
-  schema.prisma          # Prisma ORM schema (9 models)
+  schema.prisma          # Prisma ORM schema (14 models)
 Dockerfile               # Production multi-stage build
 Dockerfile.dev           # Development image with hot reload
 docker-compose.yml       # Dev: API + PostgreSQL
-docker-compose.prod.yml  # Production: API + PostgreSQL
+docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 ```
 
 ---
@@ -230,6 +235,11 @@ docker-compose.prod.yml  # Production: API + PostgreSQL
 | `ALGORITHM` | `HS256` | JWT signing algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Token expiry in minutes (24h) |
 | `UVICORN_RELOAD` | `true` | Enable/disable hot reload |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string (rate limiting) |
+| `RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
+| `RATE_LIMIT_DEFAULT_LIMIT` | `100` | Default requests per window |
+| `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window size in seconds |
+| `RATE_LIMIT_STORAGE_BACKEND` | `redis` | Storage backend (`redis` or `memory`) |
 
 ---
 
@@ -247,7 +257,7 @@ All dependencies are tracked in `pyproject.toml` and `uv.lock`.
 
 ## Database Schema (Prisma)
 
-9 models: `User`, `Therapist`, `Product`, `Session`, `Payment`, `CartItem`, `Report`.
+14 models: `User`, `Therapist`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`.
 
 After modifying `prisma/schema.prisma`:
 
