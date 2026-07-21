@@ -10,6 +10,12 @@ from app import (
     get_or_404,
     pagination_params,
 )
+from app.models.admin import AdminDashboardStats, AdminEarningsResponse, AdminRecentActivity
+from app.services.admin import (
+    get_admin_dashboard_stats,
+    get_admin_earnings,
+    get_admin_recent_activity,
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -55,3 +61,28 @@ async def list_pending_therapists(
         order={"createdAt": "desc"},
     )
     return [UserResponse.model_validate(u) for u in users]
+
+
+@router.get("/dashboard/stats", response_model=AdminDashboardStats)
+async def dashboard_stats(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    return await get_admin_dashboard_stats(db)
+
+
+@router.get("/dashboard/earnings", response_model=AdminEarningsResponse)
+async def dashboard_earnings(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    return await get_admin_earnings(db)
+
+
+@router.get("/dashboard/recent-activity", response_model=list[AdminRecentActivity])
+async def dashboard_recent_activity(
+    limit: int = 10,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    return await get_admin_recent_activity(db, limit)

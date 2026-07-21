@@ -67,6 +67,11 @@ from app.services.review import (
     get_review_by_session,
     get_reviews_for_patient,
 )
+from app.services.admin import (
+    get_admin_dashboard_stats,
+    get_admin_earnings,
+    get_admin_recent_activity,
+)
 from app.services.availability import (
     apply_recurring_pattern,
     apply_schedule,

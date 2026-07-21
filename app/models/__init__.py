@@ -56,6 +56,11 @@ from app.models.review import (
     ReviewResponse,
     TherapistToRate,
 )
+from app.models.admin import (
+    AdminDashboardStats,
+    AdminEarningsResponse,
+    AdminRecentActivity,
+)
 from app.models.availability import (
     ApplyScheduleRequest,
     AuditLogCreateRequest,

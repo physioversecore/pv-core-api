@@ -3,6 +3,9 @@ from app.database import db, get_db
 from app.deps import PaginationParams, get_admin_user, get_current_user, get_or_404, pagination_params
 
 from app.models import (
+    AdminDashboardStats,
+    AdminEarningsResponse,
+    AdminRecentActivity,
     ApplyScheduleRequest,
     AuditLogCreateRequest,
     AuditLogEntryResponse,
@@ -72,6 +75,9 @@ from app.models import (
 
 from app.services import (
     add_to_cart,
+    get_admin_dashboard_stats,
+    get_admin_earnings,
+    get_admin_recent_activity,
     apply_recurring_pattern,
     apply_schedule,
     approve_block_request,
