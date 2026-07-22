@@ -57,6 +57,8 @@ from app.models.review import (
     TherapistToRate,
 )
 from app.models.admin import (
+    AdminBookingData,
+    AdminBookingListResponse,
     AdminDashboardStats,
     AdminEarningsResponse,
     AdminPatientData,

@@ -11,6 +11,8 @@ from app import (
     pagination_params,
 )
 from app.models.admin import (
+    AdminBookingData,
+    AdminBookingListResponse,
     AdminDashboardStats,
     AdminEarningsResponse,
     AdminPatientData,
@@ -22,6 +24,7 @@ from app.models.admin import (
     AdminTherapistUpdate,
 )
 from app.services.admin import (
+    get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
     get_admin_patient,
@@ -238,3 +241,49 @@ async def dashboard_recent_activity(
     db: Prisma = Depends(get_db),
 ):
     return await get_admin_recent_activity(db, limit)
+
+
+@router.get("/bookings", response_model=AdminBookingListResponse)
+async def list_bookings_admin(
+    skip: int = 0,
+    limit: int = 10,
+    search: str | None = None,
+    status: str | None = None,
+    dateFrom: str | None = None,
+    dateTo: str | None = None,
+    sortBy: str | None = None,
+    sortOrder: str = "desc",
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    items, total = await get_admin_bookings(
+        db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        status=status,
+        date_from=dateFrom,
+        date_to=dateTo,
+        sort_by=sortBy,
+        sort_order=sortOrder,
+    )
+    return AdminBookingListResponse(items=items, total=total)
+
+
+@router.get("/bookings/new-count")
+async def new_booking_count(
+    since: str | None = None,
+    _=Depends(get_admin_user),
+    db: Prisma =Depends(get_db),
+):
+    where: dict = {}
+    if since:
+        from datetime import datetime as dt
+        try:
+            parsed = dt.fromisoformat(since.replace("Z", "+00:00"))
+            where["createdAt"] = {"gt": parsed}
+        except (ValueError, TypeError):
+            pass
+
+    count = await db.session.count(where=where)
+    return {"count": count}

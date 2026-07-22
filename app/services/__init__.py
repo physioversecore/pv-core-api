@@ -70,6 +70,7 @@ from app.services.review import (
 from app.services.admin import (
     delete_admin_patient,
     delete_admin_therapist,
+    get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
     get_admin_patient,

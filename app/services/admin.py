@@ -404,3 +404,129 @@ async def get_admin_recent_activity(db: Prisma, limit: int = 10) -> list[dict]:
         })
 
     return activities
+
+
+SESSION_STATUS_MAP = {
+    "SCHEDULED": "Confirmed",
+    "IN_PROGRESS": "Confirmed",
+    "COMPLETED": "Confirmed",
+    "CANCELLED": "Cancelled",
+    "RESCHEDULE_REQUESTED": "Rescheduled",
+    "DECLINE_REQUESTED": "Cancelled",
+}
+
+SESSION_TYPE_MAP = {
+    "HOME_VISIT": "Home Visit",
+    "CLINIC": "Clinic Visit",
+}
+
+
+async def get_admin_bookings(
+    db: Prisma,
+    *,
+    skip: int = 0,
+    limit: int = 10,
+    search: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
+):
+    where: dict = {}
+
+    if search:
+        where["OR"] = [
+            {"patient": {"name": {"contains": search, "mode": "insensitive"}}},
+            {"therapist": {"name": {"contains": search, "mode": "insensitive"}}},
+        ]
+
+    if status:
+        db_statuses = []
+        for db_status, display in SESSION_STATUS_MAP.items():
+            if display == status:
+                db_statuses.append(db_status)
+        if db_statuses:
+            where["status"] = {"in": db_statuses}
+
+    if date_from:
+        from datetime import datetime as dt
+        try:
+            parsed = dt.strptime(date_from, "%Y-%m-%d")
+            where.setdefault("date", {})["gte"] = parsed
+        except ValueError:
+            pass
+
+    if date_to:
+        from datetime import datetime as dt
+        try:
+            parsed = dt.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            where.setdefault("date", {})["lte"] = parsed
+        except ValueError:
+            pass
+
+    needs_post_sort = sort_by in ("patient", "therapist", "sessionType", "paymentStatus")
+
+    order: dict = {"date": sort_order}
+    if not needs_post_sort:
+        if sort_by == "date":
+            order = {"date": sort_order}
+        elif sort_by == "originalTime":
+            order = {"time": sort_order}
+        elif sort_by == "status":
+            order = {"status": sort_order}
+
+    total = await db.session.count(where=where)
+
+    sessions = await db.session.find_many(
+        where=where,
+        skip=None if needs_post_sort else skip,
+        take=None if needs_post_sort else limit,
+        order=order,
+        include={"therapist": True, "patient": True},
+    )
+
+    payment_map: dict[str, dict] = {}
+    session_ids = [s.id for s in sessions]
+    if session_ids:
+        payments = await db.payment.find_many(
+            where={"sessionId": {"in": session_ids}},
+        )
+        for p in payments:
+            payment_map[p.sessionId] = {
+                "status": p.status,
+                "method": p.method or "",
+            }
+
+    items = []
+    for s in sessions:
+        therapist = s.therapist
+        patient = s.patient
+        therapy_user = None
+        if therapist:
+            therapy_user = await db.user.find_unique(where={"id": therapist.userId})
+
+        payment = payment_map.get(s.id, {})
+
+        items.append({
+            "id": s.id,
+            "patient": patient.name if patient else "",
+            "patientId": s.patientId,
+            "patientPhone": patient.phone if patient else "",
+            "therapist": therapy_user.name if therapy_user else "",
+            "therapistId": s.therapistId,
+            "therapistPhone": therapy_user.phone if therapy_user else "",
+            "date": s.date.strftime("%Y-%m-%d") if s.date else "",
+            "originalTime": s.time or "",
+            "sessionType": SESSION_TYPE_MAP.get(s.type, s.type),
+            "status": SESSION_STATUS_MAP.get(s.status, s.status),
+            "paymentStatus": payment.get("status", ""),
+            "paymentMethod": payment.get("method", ""),
+        })
+
+    if needs_post_sort:
+        reverse = sort_order == "desc"
+        items.sort(key=lambda x: x.get(sort_by, "") or "", reverse=reverse)
+        items = items[skip:skip + limit]
+
+    return items, total
