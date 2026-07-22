@@ -23,7 +23,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
 @router.get("/therapists-to-rate", response_model=list[TherapistToRate])
 async def list_therapists_to_rate(
-    limit: int = Query(0, ge=0),
+    limit: int = Query(100, ge=0),
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):

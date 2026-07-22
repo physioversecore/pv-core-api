@@ -38,7 +38,7 @@ def _sanitize_id(value: str) -> str:
 async def _save_files(patient_id: str, files: list[UploadFile]) -> list[str]:
     patient_id = _sanitize_id(patient_id)
     patient_dir = REPORTS_ROOT / patient_id
-    patient_dir.mkdir(parents=False, exist_ok=True)
+    patient_dir.mkdir(parents=True, exist_ok=True)
 
     urls: list[str] = []
     for f in files:

@@ -10,6 +10,8 @@ from app.models.therapist import (
     TherapistCreate,
     TherapistDashboardResponse,
     TherapistListResponse,
+    TherapistProfileResponse,
+    TherapistProfileUpdate,
     TherapistResponse,
     TherapistUpdate,
 )
@@ -93,4 +95,10 @@ from app.models.availability import (
     UnblockRequest,
     WorkingHoursResponse,
     WorkingHoursUpdate,
+)
+from app.models.complaint import (
+    ComplaintCreate,
+    ComplaintListResponse,
+    ComplaintResponse,
+    ComplaintUpdate,
 )

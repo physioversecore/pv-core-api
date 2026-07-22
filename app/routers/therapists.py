@@ -8,6 +8,8 @@ from app import (
     TherapistCreate,
     TherapistDashboardResponse,
     TherapistListResponse,
+    TherapistProfileResponse,
+    TherapistProfileUpdate,
     TherapistResponse,
     TherapistUpdate,
     create_therapist,
@@ -17,10 +19,12 @@ from app import (
     get_or_404,
     get_therapist_by_user,
     get_therapist_dashboard,
+    get_therapist_profile,
     get_therapists,
     get_slots_for_range,
     pagination_params,
     update_therapist,
+    update_therapist_profile,
 )
 
 router = APIRouter(prefix="/therapists", tags=["Therapists"])
@@ -62,6 +66,35 @@ async def my_profile(
     if not therapist:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return TherapistResponse.model_validate(therapist)
+
+
+@router.get("/me/profile", response_model=TherapistProfileResponse)
+async def my_full_profile(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if current_user.role != Role.THERAPIST:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    profile = await get_therapist_profile(db, current_user.id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return TherapistProfileResponse(**profile)
+
+
+@router.put("/me/profile", response_model=TherapistProfileResponse)
+async def update_my_profile(
+    data: TherapistProfileUpdate,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if current_user.role != Role.THERAPIST:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    profile = await update_therapist_profile(
+        db, current_user.id, data.model_dump(exclude_none=True)
+    )
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return TherapistProfileResponse(**profile)
 
 
 @router.get("/{therapist_id}/slots", response_model=SlotRangeResponse)

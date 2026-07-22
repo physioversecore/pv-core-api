@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -37,8 +37,14 @@ async def referral(
 async def my_patients(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
+    search: str | None = Query(default=None),
+    condition: str | None = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=100),
 ):
     if current_user.role != Role.THERAPIST:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Therapist access required")
-    return await get_my_patients(db, current_user.id)
+    return await get_my_patients(
+        db, current_user.id, search=search, condition=condition, skip=skip, limit=limit
+    )

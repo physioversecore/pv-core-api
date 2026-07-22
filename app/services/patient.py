@@ -79,20 +79,79 @@ async def get_patient_referral(db: Prisma, user_id: str):
     return {"code": code, "link": link}
 
 
-async def get_my_patients(db: Prisma, therapist_user_id: str):
+async def get_my_patients(
+    db: Prisma,
+    therapist_user_id: str,
+    *,
+    search: str | None = None,
+    condition: str | None = None,
+    skip: int = 0,
+    limit: int = 10,
+):
+    from datetime import timezone
+
     therapist = await db.therapist.find_unique(where={"userId": therapist_user_id})
     if not therapist:
-        return []
+        return {"patients": [], "total": 0}
 
     sessions = await db.session.find_many(
         where={"therapistId": therapist.id},
+        order={"date": "desc"},
     )
-    patient_ids = list({s.patientId for s in sessions})
-    if not patient_ids:
-        return []
 
-    patients = await db.user.find_many(
-        where={"id": {"in": patient_ids}},
+    patient_map: dict[str, dict] = {}
+    for s in sessions:
+        pid = s.patientId
+        if pid not in patient_map:
+            patient_map[pid] = {
+                "id": pid,
+                "sessions": 0,
+                "last": s.date.isoformat(),
+                "notes": s.notes or "",
+            }
+        patient_map[pid]["sessions"] += 1
+        if not patient_map[pid]["notes"] and s.notes:
+            patient_map[pid]["notes"] = s.notes
+
+    patient_ids = list(patient_map.keys())
+    if not patient_ids:
+        return {"patients": [], "total": 0}
+
+    where: dict = {"id": {"in": patient_ids}}
+    filters: list[dict] = []
+    if search:
+        filters.append({"name": {"contains": search, "mode": "insensitive"}})
+    if condition:
+        filters.append({"condition": {"equals": condition, "mode": "insensitive"}})
+    if len(filters) == 1:
+        where.update(filters[0])
+    elif filters:
+        where["AND"] = filters
+
+    total = await db.user.count(where=where)
+    users = await db.user.find_many(
+        where=where,
         order={"name": "asc"},
+        skip=skip,
+        take=limit,
     )
-    return [{"id": p.id, "name": p.name} for p in patients]
+
+    result = []
+    for u in users:
+        meta = patient_map.get(u.id, {})
+        last_val = meta.get("last", "")
+        if hasattr(last_val, "isoformat"):
+            if last_val.tzinfo is None:
+                last_val = last_val.replace(tzinfo=timezone.utc)
+            last_val = last_val.isoformat()
+        result.append({
+            "id": u.id,
+            "name": u.name,
+            "phone": u.phone or "",
+            "condition": u.condition or "",
+            "sessions": meta.get("sessions", 0),
+            "last": last_val,
+            "notes": meta.get("notes", ""),
+        })
+
+    return {"patients": result, "total": total}

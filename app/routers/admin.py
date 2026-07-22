@@ -6,6 +6,7 @@ from app import (
     PaginationParams,
     UserResponse,
     get_admin_user,
+    get_current_user,
     get_db,
     get_or_404,
     pagination_params,
@@ -21,6 +22,12 @@ from app.models.admin import (
     AdminTherapistListResponse,
     AdminTherapistUpdate,
 )
+from app.models.complaint import (
+    ComplaintCreate,
+    ComplaintListResponse,
+    ComplaintResponse,
+    ComplaintUpdate,
+)
 from app.services.admin import (
     get_admin_dashboard_stats,
     get_admin_earnings,
@@ -33,6 +40,13 @@ from app.services.admin import (
     delete_admin_therapist,
     update_admin_patient,
     delete_admin_patient,
+)
+from app.services.complaint import (
+    create_complaint,
+    delete_complaint,
+    get_complaint,
+    get_complaints,
+    update_complaint,
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -238,3 +252,74 @@ async def dashboard_recent_activity(
     db: Prisma = Depends(get_db),
 ):
     return await get_admin_recent_activity(db, limit)
+
+
+# ── Complaints ──
+
+
+@router.get("/complaints", response_model=ComplaintListResponse)
+async def list_complaints(
+    skip: int = 0,
+    limit: int = 10,
+    search: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    complainantId: str | None = None,
+    sortBy: str | None = None,
+    sortOrder: str = "desc",
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    items, total = await get_complaints(
+        db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        type_filter=type,
+        status=status,
+        priority=priority,
+        category=category,
+        complainant_id=complainantId,
+        sort_by=sortBy,
+        sort_order=sortOrder,
+    )
+    return ComplaintListResponse(
+        items=[ComplaintResponse.model_validate(c) for c in items],
+        total=total,
+    )
+
+
+@router.post("/complaints", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED)
+async def submit_complaint(
+    data: ComplaintCreate,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    complaint = await create_complaint(db, data.model_dump())
+    return ComplaintResponse.model_validate(complaint)
+
+
+@router.put("/complaints/{complaint_id}", response_model=ComplaintResponse)
+async def update_complaint_by_id(
+    complaint_id: str,
+    data: ComplaintUpdate,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    await get_or_404(db, "complaint", complaint_id)
+    updated = await update_complaint(
+        db, complaint_id, data.model_dump(exclude_none=True)
+    )
+    return ComplaintResponse.model_validate(updated)
+
+
+@router.delete("/complaints/{complaint_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_complaint_by_id(
+    complaint_id: str,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    await get_or_404(db, "complaint", complaint_id)
+    await delete_complaint(db, complaint_id)

@@ -22,6 +22,36 @@ class TherapistUpdate(BaseModel):
     bio: str | None = None
 
 
+class TherapistProfileResponse(BaseModel):
+    id: str
+    userId: str
+    name: str
+    email: str
+    phone: str
+    city: str
+    specialty: str
+    gender: str
+    price: float
+    experience: int
+    bio: str
+    mediaUrls: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class TherapistProfileUpdate(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    city: str | None = None
+    specialty: str | None = None
+    gender: str | None = None
+    price: float | None = None
+    experience: int | None = None
+    bio: str | None = None
+    mediaUrls: str | None = None
+
+
 class TherapistResponse(BaseModel):
     id: str
     userId: str

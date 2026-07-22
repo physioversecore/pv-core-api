@@ -55,6 +55,7 @@ model User {
   role          Role       @default(PATIENT)
   city          String?
   phone         String?
+  condition     String?
   specialty     String?
   status        UserStatus @default(PENDING)
   referralCode  String?
@@ -304,4 +305,30 @@ model ScheduleBlockRequest {
   @@index([therapistId])
   @@index([status])
   @@index([therapistId, status])
+}
+
+model Complaint {
+  id              String   @id @default(cuid())
+  type            String
+  complainantId   String
+  complainantName String
+  againstId       String
+  againstName     String
+  category        String
+  priority        String   @default("Normal")
+  status          String   @default("Open")
+  description     String
+  bookingId       String?
+  evidenceUrls    String?
+  preferredOutcome String?
+  assignee        String?
+  adminNotes      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([complainantId])
+  @@index([againstId])
+  @@index([status])
+  @@index([type])
+  @@index([type, status])
 }

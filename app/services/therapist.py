@@ -29,6 +29,50 @@ async def update_therapist(db: Prisma, therapist_id: str, data: dict):
     return await db.therapist.update(where={"id": therapist_id}, data=data)
 
 
+async def get_therapist_profile(db: Prisma, user_id: str):
+    user = await db.user.find_unique(where={"id": user_id})
+    if not user:
+        return None
+    therapist = await db.therapist.find_unique(where={"userId": user_id})
+    if not therapist:
+        return None
+    return {
+        "id": therapist.id,
+        "userId": user.id,
+        "name": therapist.name,
+        "email": user.email,
+        "phone": user.phone or "",
+        "city": therapist.city,
+        "specialty": therapist.specialty,
+        "gender": therapist.gender,
+        "price": therapist.price,
+        "experience": therapist.experience,
+        "bio": therapist.bio,
+        "mediaUrls": therapist.mediaUrls,
+    }
+
+
+async def update_therapist_profile(db: Prisma, user_id: str, data: dict):
+    user_fields = {}
+    therapist_fields = {}
+
+    user_field_keys = {"name", "phone", "city", "specialty"}
+    therapist_field_keys = {"name", "city", "specialty", "gender", "price", "experience", "bio", "mediaUrls"}
+
+    for key, value in data.items():
+        if key in user_field_keys and value is not None:
+            user_fields[key] = value
+        if key in therapist_field_keys and value is not None:
+            therapist_fields[key] = value
+
+    if user_fields:
+        await db.user.update(where={"id": user_id}, data=user_fields)
+    if therapist_fields:
+        await db.therapist.update(where={"userId": user_id}, data=therapist_fields)
+
+    return await get_therapist_profile(db, user_id)
+
+
 async def delete_therapist(db: Prisma, therapist_id: str):
     await db.therapist.delete(where={"id": therapist_id})
 

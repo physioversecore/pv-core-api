@@ -12,8 +12,10 @@ from app.services.therapist import (
     get_therapist,
     get_therapist_by_user,
     get_therapist_dashboard,
+    get_therapist_profile,
     get_therapists,
     update_therapist,
+    update_therapist_profile,
 )
 from app.services.session import (
     create_session,
@@ -106,4 +108,11 @@ from app.services.availability import (
     toggle_recurring_pattern,
     unblock_item,
     update_working_hours,
+)
+from app.services.complaint import (
+    create_complaint,
+    delete_complaint,
+    get_complaint,
+    get_complaints,
+    update_complaint,
 )

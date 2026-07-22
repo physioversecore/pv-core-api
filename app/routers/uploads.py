@@ -1,12 +1,14 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse
 from prisma import Prisma
 from prisma.enums import Role
 
-from app import get_current_user, get_db
+from app import get_current_user, get_db, settings
+from app.database import db
+from jose import JWTError, jwt
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
@@ -42,8 +44,20 @@ def _validate_upload_size(content: bytes) -> None:
 async def serve_file(
     patient_id: str,
     filename: str,
-    current_user=Depends(get_current_user),
+    token: str = Query(...),
 ):
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id: str | None = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = await db.user.find_unique(where={"id": user_id})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
     patient_id = _sanitize_id(patient_id)
     file_path = (REPORTS_ROOT / patient_id / filename).resolve()
 
@@ -53,7 +67,7 @@ async def serve_file(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    if current_user.role == Role.PATIENT and current_user.id != patient_id:
+    if user.role == Role.PATIENT and user.id != patient_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     import mimetypes
