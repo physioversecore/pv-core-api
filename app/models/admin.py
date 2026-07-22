@@ -94,3 +94,27 @@ class AdminPatientUpdate(BaseModel):
     phone: str | None = None
     email: str | None = None
     isActive: bool | None = None
+
+
+class AdminBookingData(BaseModel):
+    id: str
+    patient: str
+    patientId: str
+    patientPhone: str = ""
+    therapist: str
+    therapistId: str
+    therapistPhone: str = ""
+    date: str
+    originalTime: str
+    sessionType: str
+    status: str
+    paymentStatus: str = ""
+    paymentMethod: str = ""
+
+    class Config:
+        from_attributes = True
+
+
+class AdminBookingListResponse(BaseModel):
+    items: list[AdminBookingData]
+    total: int
