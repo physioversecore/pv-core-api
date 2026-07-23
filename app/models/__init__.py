@@ -61,15 +61,23 @@ from app.models.review import (
 from app.models.admin import (
     AdminBookingData,
     AdminBookingListResponse,
+    AdminCreateTherapistRequest,
     AdminDashboardStats,
     AdminEarningsResponse,
     AdminPatientData,
     AdminPatientListResponse,
     AdminPatientUpdate,
+    AdminPerformanceData,
+    AdminPerformanceListResponse,
+    AdminPerformanceUpdate,
     AdminRecentActivity,
+    AdminTherapistCreatedResponse,
     AdminTherapistData,
     AdminTherapistListResponse,
     AdminTherapistUpdate,
+    RemoveFromTeamRequest,
+    ResolveRequest,
+    ScheduleReviewRequest,
 )
 from app.models.availability import (
     ApplyScheduleRequest,
@@ -103,4 +111,18 @@ from app.models.complaint import (
     ComplaintListResponse,
     ComplaintResponse,
     ComplaintUpdate,
+)
+from app.models.service_area import (
+    ServiceAreaCreate,
+    ServiceAreaListResponse,
+    ServiceAreaResponse,
+    ServiceAreaUpdate,
+    TherapistAssignRequest,
+)
+from app.models.refund import (
+    RefundCreate,
+    RefundListResponse,
+    RefundResponse,
+    RefundStatsResponse,
+    RefundUpdate,
 )

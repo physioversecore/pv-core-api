@@ -41,6 +41,8 @@ class ComplaintResponse(BaseModel):
     preferredOutcome: str | None = None
     assignee: str | None = None
     adminNotes: str | None = None
+    source: str | None = None
+    refundId: str | None = None
     createdAt: datetime
     updatedAt: datetime
 
