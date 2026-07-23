@@ -50,11 +50,21 @@ async def get_complaints(
 
 
 async def get_complaint(db: Prisma, complaint_id: str):
-    return await db.complaint.find_unique(where={"id": complaint_id})
+    return await db.complaint.find_unique(
+        where={"id": complaint_id},
+        include={"refund": True},
+    )
 
 
 async def update_complaint(db: Prisma, complaint_id: str, data: dict):
     return await db.complaint.update(where={"id": complaint_id}, data=data)
+
+
+async def assign_complaint(db: Prisma, complaint_id: str, assignee: str):
+    return await db.complaint.update(
+        where={"id": complaint_id},
+        data={"assignee": assignee, "status": "Under review"},
+    )
 
 
 async def delete_complaint(db: Prisma, complaint_id: str):

@@ -70,17 +70,25 @@ from app.services.review import (
     get_reviews_for_patient,
 )
 from app.services.admin import (
+    create_therapist_by_admin,
     delete_admin_patient,
+    delete_admin_performance,
     delete_admin_therapist,
     get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
     get_admin_patient,
     get_admin_patients,
+    get_admin_performance,
+    get_admin_performance_detail,
     get_admin_recent_activity,
     get_admin_therapist,
     get_admin_therapists,
+    remove_from_team,
+    resolve_therapist,
+    schedule_review,
     update_admin_patient,
+    update_admin_performance,
     update_admin_therapist,
 )
 from app.services.availability import (
@@ -111,9 +119,29 @@ from app.services.availability import (
     update_working_hours,
 )
 from app.services.complaint import (
+    assign_complaint,
     create_complaint,
     delete_complaint,
     get_complaint,
     get_complaints,
     update_complaint,
 )
+from app.services.service_area import (
+    assign_therapist_to_area,
+    create_service_area,
+    delete_service_area,
+    get_service_area,
+    get_service_areas,
+    update_service_area,
+)
+from app.services.refund import (
+    assign_refund,
+    create_manual_case,
+    create_refund,
+    delete_refund,
+    get_refund,
+    get_refund_stats,
+    get_refunds,
+    update_refund,
+)
+from app.services.activity_log import log_admin_activity, get_activity_logs

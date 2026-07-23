@@ -118,3 +118,80 @@ class AdminBookingData(BaseModel):
 class AdminBookingListResponse(BaseModel):
     items: list[AdminBookingData]
     total: int
+
+
+class AdminPerformanceData(BaseModel):
+    id: str
+    name: str
+    avgRating: float
+    sessions: int
+    reviews: int
+    trend: float
+    linkedComplaints: int
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class AdminPerformanceListResponse(BaseModel):
+    items: list[AdminPerformanceData]
+    total: int
+
+
+class AdminPerformanceUpdate(BaseModel):
+    name: str | None = None
+    avgRating: float | None = None
+    sessions: int | None = None
+    reviews: int | None = None
+    trend: float | None = None
+    linkedComplaints: int | None = None
+    status: str | None = None
+
+
+class ScheduleReviewRequest(BaseModel):
+    date: str
+    adminId: str
+    notes: str = ""
+
+
+class ResolveRequest(BaseModel):
+    note: str = ""
+    reviewBy: str = ""
+
+
+class RemoveFromTeamRequest(BaseModel):
+    reason: str = ""
+
+
+class AdminCreateTherapistRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    phone: str | None = None
+    city: str
+    specialty: str
+    gender: str
+    price: float
+    experience: int
+    bio: str = ""
+    citizenshipNumber: str | None = None
+    panNumber: str | None = None
+    medicalLicenseUrl: str | None = None
+    certificateUrl: str | None = None
+
+
+class AdminTherapistCreatedResponse(BaseModel):
+    id: str
+    userId: str
+    name: str
+    email: str
+    phone: str | None = None
+    city: str
+    specialty: str
+    gender: str
+    price: float
+    experience: int
+    bio: str
+    createdAt: str
+    updatedAt: str

@@ -68,6 +68,7 @@ model User {
   reports     Report[]
   cartItems   CartItem[]
   payments    Payment[]
+  refunds     Refund[]     @relation("PatientRefunds")
 
   @@index([role])
   @@index([status])
@@ -90,6 +91,13 @@ model Therapist {
   experience Int
   bio        String
   mediaUrls  String?
+
+  sessionsOverride       Int?
+  reviewsOverride        Int?
+  trendOverride          Float?
+  linkedComplaintsOverride Int?
+  statusOverride         String?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -101,10 +109,31 @@ model Therapist {
   availabilityBlocks AvailabilityBlock[]
   auditLogEntries  AuditLogEntry[]
   blockRequests ScheduleBlockRequest[]
+  serviceAreas TherapistServiceArea[]
+  verifications Verification[]
 
   @@index([city])
   @@index([specialty])
   @@index([city, specialty])
+}
+
+model Verification {
+  id           String   @id @default(cuid())
+  therapistId  String
+  therapist    Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  documentType String
+  uploaded     DateTime @default(now())
+  expires      DateTime?
+  status       String   @default("Pending review")
+  severity     String?
+  reportedBy   String?
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([therapistId])
+  @@index([status])
+  @@index([therapistId, status])
 }
 
 model Product {
@@ -307,6 +336,12 @@ model ScheduleBlockRequest {
   @@index([therapistId, status])
 }
 
+enum CaseSource {
+  PATIENT_SUBMITTED
+  THERAPIST_SUBMITTED
+  ADMIN_MANUAL
+}
+
 model Complaint {
   id              String   @id @default(cuid())
   type            String
@@ -323,12 +358,95 @@ model Complaint {
   preferredOutcome String?
   assignee        String?
   adminNotes      String?
+  source          CaseSource @default(PATIENT_SUBMITTED)
+  refundId        String?    @unique
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  refund Refund?
 
   @@index([complainantId])
   @@index([againstId])
   @@index([status])
   @@index([type])
   @@index([type, status])
+}
+
+model ServiceArea {
+  id        String   @id @default(cuid())
+  name      String
+  localities Json
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  therapistServiceAreas TherapistServiceArea[]
+
+  @@index([name])
+  @@index([status])
+}
+
+enum RefundReason {
+  NO_SHOW
+  DOUBLE_CHARGE
+  SERVICE_QUALITY
+  CANCELLATION
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+model Refund {
+  id          String       @id @default(cuid())
+  patientId   String
+  patient     User         @relation("PatientRefunds", fields: [patientId], references: [id], onDelete: Cascade)
+  bookingId   String
+  amount      Float
+  reason      RefundReason
+  status      RefundStatus @default(PENDING)
+  denyReason  String?
+  resolvedAt  DateTime?
+  assigneeId  String?
+  source      CaseSource   @default(PATIENT_SUBMITTED)
+  complaintId String?      @unique
+  complaint   Complaint?   @relation(fields: [complaintId], references: [id])
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([patientId])
+  @@index([status])
+  @@index([bookingId])
+  @@index([assigneeId])
+  @@index([patientId, status])
+}
+
+model TherapistServiceArea {
+  id            String      @id @default(cuid())
+  therapistId   String
+  therapist     Therapist   @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  serviceAreaId String
+  serviceArea   ServiceArea @relation(fields: [serviceAreaId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([therapistId, serviceAreaId])
+  @@index([therapistId])
+  @@index([serviceAreaId])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }
