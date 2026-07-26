@@ -50,6 +50,8 @@ from app.models.report import (
 from app.models.patient import (
     NextSessionInfo,
     PatientDashboardResponse,
+    PatientProfileResponse,
+    PatientProfileUpdate,
     ReferralResponse,
 )
 from app.models.review import (

@@ -1,5 +1,6 @@
 import secrets
 import string
+from datetime import datetime, timezone
 
 from prisma import Prisma
 
@@ -8,6 +9,46 @@ def generate_referral_code() -> str:
     chars = string.ascii_uppercase + string.digits
     suffix = "".join(secrets.choice(chars) for _ in range(8))
     return f"SAHA-{suffix}"
+
+
+async def get_patient_profile(db: Prisma, user_id: str):
+    profile = await db.patientprofile.find_unique(where={"userId": user_id})
+    return profile
+
+
+async def upsert_patient_profile(db: Prisma, user_id: str, data: dict):
+    existing = await db.patientprofile.find_unique(where={"userId": user_id})
+    
+    if existing:
+        update_data = {k: v for k, v in data.items() if v is not None}
+        if not update_data:
+            return existing
+        profile = await db.patientprofile.update(
+            where={"userId": user_id},
+            data=update_data,
+        )
+    else:
+        user = await db.user.find_unique(where={"id": user_id})
+        filtered = {k: v for k, v in data.items() if v is not None}
+        create_data = {
+            "userId": user_id,
+            "name": filtered.get("name") or (user.name if user else "Patient"),
+            "phone": filtered.get("phone") or (user.phone if user and user.phone else ""),
+            "city": filtered.get("city") or (user.city if user and user.city else "Kathmandu"),
+        }
+        if "address" in filtered:
+            create_data["address"] = filtered["address"]
+        if "history" in filtered:
+            create_data["history"] = filtered["history"]
+        if "gender" in filtered:
+            create_data["gender"] = filtered["gender"]
+        if "notifEmail" in filtered:
+            create_data["notifEmail"] = filtered["notifEmail"]
+        if "notifSms" in filtered:
+            create_data["notifSms"] = filtered["notifSms"]
+        profile = await db.patientprofile.create(data=create_data)
+    
+    return profile
 
 
 async def get_patient_dashboard(db: Prisma, user_id: str):

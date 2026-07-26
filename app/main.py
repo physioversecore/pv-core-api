@@ -21,9 +21,11 @@ from app.rate_limit.middleware import RateLimitMiddleware
 
 from app.routers import (
     admin_router,
+    admin_extras_router,
     auth_router,
     availability_router,
     cart_router,
+    earnings_router,
     patients_router,
     payments_router,
     products_router,
@@ -119,11 +121,13 @@ if settings.rate_limit_enabled:
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(patients_router, prefix="/api/v1")
 app.include_router(therapists_router, prefix="/api/v1")
+app.include_router(earnings_router, prefix="/api/v1")
 app.include_router(sessions_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(cart_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(admin_extras_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(uploads_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")

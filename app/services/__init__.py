@@ -60,7 +60,9 @@ from app.services.patient import (
     generate_referral_code,
     get_my_patients,
     get_patient_dashboard,
+    get_patient_profile,
     get_patient_referral,
+    upsert_patient_profile,
 )
 from app.services.review import (
     create_review,

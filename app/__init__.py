@@ -41,6 +41,8 @@ from app.models import (
     OpenMonthResponse,
     PaginatedAuditLogResponse,
     PatientDashboardResponse,
+    PatientProfileResponse,
+    PatientProfileUpdate,
     PaymentCreate,
     PaymentListResponse,
     PaymentResponse,
@@ -158,6 +160,7 @@ from app.services import (
     get_monthly_availability,
     get_my_patients,
     get_patient_dashboard,
+    get_patient_profile,
     get_patient_referral,
     get_payment,
     get_payments_for_user,
@@ -200,6 +203,7 @@ from app.services import (
     update_therapist_profile,
     update_user,
     update_working_hours,
+    upsert_patient_profile,
     verify_password,
 )
 

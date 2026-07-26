@@ -131,7 +131,7 @@ async def list_users(
     if role:
         where["role"] = role.upper()
     users = await db.user.find_many(
-        where=where, order={"createdAt": "desc"}, **pagination
+        where=where, order={"createdAt": "desc"}, skip=pagination["skip"], take=pagination["limit"]
     )
     return [UserResponse.model_validate(u) for u in users]
 
@@ -907,4 +907,3 @@ async def list_activity_log(
         ],
         "total": total,
     }
-    await log_admin_activity(db, current_user.id, "DELETE_REFUND", "Refund", refund_id)
