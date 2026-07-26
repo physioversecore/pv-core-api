@@ -120,7 +120,7 @@ async def get_monthly_availability(
     db: Prisma, therapist_id: str, month: int, year: int
 ) -> dict:
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
-    user_id = therapist.userId if therapist else therapist_id
+    user_id = therapist.userId if therapist and hasattr(therapist, "userId") else therapist_id
     wh = await _get_wh(db, user_id)
     times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     days_in_month = calendar.monthrange(year, month)[1]
@@ -186,7 +186,7 @@ async def apply_recurring_pattern(db: Prisma, therapist_id: str, data: dict) -> 
     days = data["days"]
     sessions_list = data["sessions"]
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
-    user_id = therapist.userId if therapist else therapist_id
+    user_id = therapist.userId if therapist and hasattr(therapist, "userId") else therapist_id
     wh = await _get_wh(db, user_id)
     now = datetime.now()
     year, month = now.year, now.month
@@ -309,7 +309,7 @@ async def open_full_month(db: Prisma, therapist_id: str, data: dict) -> dict:
     year, month = data["year"], data["month"]
     days, sessions_list = data["days"], data["sessions"]
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
-    user_id = therapist.userId if therapist else therapist_id
+    user_id = therapist.userId if therapist and hasattr(therapist, "userId") else therapist_id
     wh = await _get_wh(db, user_id)
     times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     days_in_month = calendar.monthrange(year, month)[1]
@@ -340,7 +340,7 @@ async def block_date(db: Prisma, therapist_id: str, data: dict) -> dict:
     date_str = data["date"]
     sessions_filter = data.get("sessions")
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
-    user_id = therapist.userId if therapist else therapist_id
+    user_id = therapist.userId if therapist and hasattr(therapist, "userId") else therapist_id
     wh = await _get_wh(db, user_id)
     times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
     blocked = 0
@@ -434,7 +434,7 @@ async def generate_availability(db: Prisma, therapist_id: str, data: dict) -> di
         "daysOfWeek": data.get("daysOfWeek", []),
     }
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
-    user_id = therapist.userId if therapist else therapist_id
+    user_id = therapist.userId if therapist and hasattr(therapist, "userId") else therapist_id
     await _save_wh(db, user_id, wh_data)
 
     return {"updated": opened}
@@ -550,7 +550,7 @@ async def get_slots_for_range(db: Prisma, therapist_id: str, date_from: str, dat
     d_to = date.fromisoformat(date_to)
 
     therapist = await db.therapist.find_unique(where={"id": therapist_id})
-    user_id = therapist.userId if therapist else therapist_id
+    user_id = therapist.userId if therapist and hasattr(therapist, "userId") else therapist_id
     wh = await _get_wh(db, user_id)
     times = _generate_slots(wh["start"], wh["end"], wh.get("sessionDuration", 60) + wh.get("breakDuration", 0))
 
@@ -744,7 +744,7 @@ async def get_pending_block_requests(db: Prisma) -> list[dict]:
     result = []
     for r in rows:
         therapist = await db.therapist.find_unique(where={"id": r.therapistId})
-        user = await db.user.find_unique(where={"id": therapist.userId}) if therapist else None
+        user = await db.user.find_unique(where={"id": therapist.userId}) if therapist and hasattr(therapist, "userId") else None
         result.append({
             "id": r.id,
             "therapistId": r.therapistId,

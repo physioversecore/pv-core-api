@@ -1,3 +1,9 @@
+-- CreateEnum
+CREATE TYPE "RefundReason" AS ENUM ('NO_SHOW', 'DOUBLE_CHARGE', 'SERVICE_QUALITY', 'CANCELLATION');
+
+-- CreateEnum
+CREATE TYPE "RefundStatus" AS ENUM ('PENDING', 'APPROVED', 'DENIED');
+
 -- CreateTable
 CREATE TABLE "Refund" (
     "id" TEXT NOT NULL,

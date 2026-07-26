@@ -63,6 +63,7 @@ model User {
   updatedAt     DateTime   @updatedAt
 
   therapist   Therapist?
+  patientProfile PatientProfile?
   sessionsAsPatient Session[] @relation("PatientSessions")
   reviews     Review[] @relation("PatientReviews")
   reports     Report[]
@@ -75,6 +76,24 @@ model User {
   @@index([city])
   @@index([referralCode])
   @@index([role, status])
+}
+
+model PatientProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  phone       String
+  city        String
+  address     String?
+  history     String?
+  gender      String   @default("Any")
+  notifEmail  Boolean  @default(true)
+  notifSms    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Therapist {

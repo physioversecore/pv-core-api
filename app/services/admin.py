@@ -504,7 +504,7 @@ async def get_admin_bookings(
         patient = s.patient
         therapy_user = None
         if therapist:
-            therapy_user = await db.user.find_unique(where={"id": therapist.userId})
+            therapy_user = await db.user.find_unique(where={"id": therapist.userId}) if hasattr(therapist, "userId") else None
 
         payment = payment_map.get(s.id, {})
 

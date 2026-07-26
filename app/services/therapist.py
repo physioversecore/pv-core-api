@@ -39,15 +39,15 @@ async def get_therapist_profile(db: Prisma, user_id: str):
     return {
         "id": therapist.id,
         "userId": user.id,
-        "name": therapist.name,
+        "name": therapist.name or user.name,
         "email": user.email,
         "phone": user.phone or "",
-        "city": therapist.city,
-        "specialty": therapist.specialty,
-        "gender": therapist.gender,
-        "price": therapist.price,
-        "experience": therapist.experience,
-        "bio": therapist.bio,
+        "city": therapist.city or "",
+        "specialty": therapist.specialty or "General",
+        "gender": therapist.gender or "Male",
+        "price": therapist.price or 0.0,
+        "experience": therapist.experience or 0,
+        "bio": therapist.bio or "",
         "mediaUrls": therapist.mediaUrls,
     }
 
@@ -67,8 +67,24 @@ async def update_therapist_profile(db: Prisma, user_id: str, data: dict):
 
     if user_fields:
         await db.user.update(where={"id": user_id}, data=user_fields)
-    if therapist_fields:
-        await db.therapist.update(where={"userId": user_id}, data=therapist_fields)
+
+    existing = await db.therapist.find_unique(where={"userId": user_id})
+    if existing:
+        if therapist_fields:
+            await db.therapist.update(where={"userId": user_id}, data=therapist_fields)
+    else:
+        user = await db.user.find_unique(where={"id": user_id})
+        create_data = {
+            "userId": user_id,
+            "name": therapist_fields.get("name") or (user.name if user else "Therapist"),
+            "specialty": therapist_fields.get("specialty") or (user.specialty if user and user.specialty else "General"),
+            "city": therapist_fields.get("city") or (user.city if user and user.city else "Kathmandu"),
+            "gender": therapist_fields.get("gender") or "Male",
+            "price": therapist_fields.get("price") or 1000.0,
+            "experience": therapist_fields.get("experience") or 1,
+            "bio": therapist_fields.get("bio") or "",
+        }
+        await db.therapist.create(data=create_data)
 
     return await get_therapist_profile(db, user_id)
 
@@ -129,7 +145,7 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
             "time": s.time,
             "patient": s.patient.name if s.patient else "Unknown",
             "patientId": s.patientId,
-            "address": s.address,
+            "address": s.address or "",
             "type": s.type,
             "status": "Confirmed" if s.status == "SCHEDULED" else "Pending",
         }
@@ -147,10 +163,10 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
             "id": r.id,
             "patient": r.patient.name if r.patient else "Unknown",
             "kind": _detect_report_kind(r),
-            "title": r.title,
+            "title": r.title or "",
             "content": r.content or "",
             "files": [u.strip() for u in r.fileUrl.split(",") if u.strip()] if r.fileUrl else [],
-            "date": r.createdAt.strftime("%-d %b"),
+            "date": r.createdAt.strftime("%-d %b") if r.createdAt else "",
         }
         for r in recent_reports_raw
     ]
@@ -178,19 +194,19 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
     link = f"https://sahayatri.np/join/{code}"
 
     return {
-        "name": user.name,
+        "name": user.name or "Therapist",
         "sessionsThisWeek": sessions_this_week,
         "totalPatients": total_patients,
         "earningsThisMonth": earnings,
-        "averageRating": therapist.rating,
+        "averageRating": therapist.rating or 0.0,
         "todaySessions": today_sessions,
         "recentUploads": recent_reports,
         "publicProfile": {
-            "name": therapist.name,
-            "specialty": therapist.specialty,
-            "experience": therapist.experience,
-            "rating": therapist.rating,
-            "totalReviews": therapist.reviews,
+            "name": therapist.name or user.name or "Therapist",
+            "specialty": therapist.specialty or "General",
+            "experience": therapist.experience or 0,
+            "rating": therapist.rating or 0.0,
+            "totalReviews": therapist.reviews or 0,
         },
         "recentRatings": recent_ratings,
         "referralCode": code,

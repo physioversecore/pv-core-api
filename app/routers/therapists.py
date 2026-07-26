@@ -24,7 +24,7 @@ from app import (
     get_slots_for_range,
     pagination_params,
     update_therapist,
-    update_therapist_profile,
+    update_therapist_profile as update_therapist_profile_svc,
 )
 
 router = APIRouter(prefix="/therapists", tags=["Therapists"])
@@ -87,14 +87,28 @@ async def update_my_profile(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if current_user.role != Role.THERAPIST:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    profile = await update_therapist_profile(
-        db, current_user.id, data.model_dump(exclude_none=True)
-    )
-    if not profile:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return TherapistProfileResponse(**profile)
+    
+    try:
+        logger.warning(f"Updating therapist profile for user {current_user.id}, data: {data.model_dump(exclude_none=True)}")
+        profile = await update_therapist_profile_svc(
+            db, current_user.id, data.model_dump(exclude_none=True)
+        )
+        logger.warning(f"Profile after update: {profile}")
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return TherapistProfileResponse(**profile)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating therapist profile for user {current_user.id}: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
 
 
 @router.get("/{therapist_id}/slots", response_model=SlotRangeResponse)

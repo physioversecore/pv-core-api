@@ -2,12 +2,19 @@ from prisma import Prisma
 
 
 def _enrich_session(s):
-    d = s.model_dump() if hasattr(s, "model_dump") else vars(s)
-    d["therapistName"] = s.therapist.name if hasattr(s, "therapist") and s.therapist else ""
-    patient = getattr(s, "patient", None)
-    d["patientName"] = patient.name if patient else ""
-    d["patientPhone"] = patient.phone if patient else ""
-    return d
+    if s is None:
+        return {"id": "", "therapistName": "", "patientName": "", "patientPhone": ""}
+    try:
+        d = s.model_dump() if hasattr(s, "model_dump") else vars(s)
+        d["therapistName"] = ""
+        if hasattr(s, "therapist") and s.therapist:
+            d["therapistName"] = s.therapist.name if s.therapist.name else ""
+        patient = getattr(s, "patient", None)
+        d["patientName"] = patient.name if patient and patient.name else ""
+        d["patientPhone"] = patient.phone if patient and patient.phone else ""
+        return d
+    except Exception:
+        return {"id": getattr(s, "id", ""), "therapistName": "", "patientName": "", "patientPhone": ""}
 
 
 def _enrich_sessions(sessions: list):
@@ -97,7 +104,7 @@ async def reschedule_session(
     if conflict:
         return None, "CONFLICT"
 
-    therapist_user_id = session.therapist.userId if hasattr(session.therapist, "userId") else session.therapistId
+    therapist_user_id = session.therapist.userId if session.therapist and hasattr(session.therapist, "userId") else session.therapistId
     from app.services.availability import _get_wh, _generate_slots
 
     wh = await _get_wh(db, therapist_user_id)
