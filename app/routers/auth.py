@@ -35,13 +35,18 @@ async def send_verification_otp(data: SendOtpRequest, db: Prisma = Depends(get_d
             detail="Email already registered",
         )
 
-    sent = await send_otp(db, email=data.email, name=data.name, purpose="signup")
+    sent, resend_after = await send_otp(db, email=data.email, name=data.name, purpose="signup")
+    if not sent and resend_after > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {resend_after} seconds before requesting a new code",
+        )
     if not sent:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Failed to send verification email. Please try again.",
         )
-    return {"message": "OTP sent successfully"}
+    return {"message": "OTP sent successfully", "resend_after": resend_after}
 
 
 @router.post("/verify-otp")

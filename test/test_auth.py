@@ -17,7 +17,7 @@ NOW = datetime.now(timezone.utc)
 
 
 class TestSendOtp:
-    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=True)
+    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(True, 120))
     def test_send_otp_success(self, mock_send, client, mock_db):
         mock_db.user.find_unique.return_value = None
 
@@ -25,6 +25,7 @@ class TestSendOtp:
 
         assert response.status_code == 200
         assert response.json()["message"] == "OTP sent successfully"
+        assert response.json()["resend_after"] == 120
         mock_send.assert_called_once()
 
     def test_send_otp_duplicate_email(self, client, mock_db):
@@ -35,7 +36,7 @@ class TestSendOtp:
         assert response.status_code == 409
         assert "already registered" in response.json()["detail"]
 
-    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=False)
+    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(False, 0))
     def test_send_otp_email_failure(self, mock_send, client, mock_db):
         mock_db.user.find_unique.return_value = None
 
@@ -43,6 +44,15 @@ class TestSendOtp:
 
         assert response.status_code == 503
         assert "Failed to send" in response.json()["detail"]
+
+    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(False, 90))
+    def test_send_otp_cooldown(self, mock_send, client, mock_db):
+        mock_db.user.find_unique.return_value = None
+
+        response = client.post("/api/v1/auth/send-otp", json={"email": "new@test.com", "name": "Test"})
+
+        assert response.status_code == 429
+        assert "90" in response.json()["detail"]
 
 
 class TestVerifyOtp:

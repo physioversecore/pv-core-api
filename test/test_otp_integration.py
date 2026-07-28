@@ -35,8 +35,21 @@ def test_send_otp():
 
 def test_send_otp_resends_and_invalidates():
     r = httpx.post(f"{BASE}/auth/send-otp", json={"email": EMAIL, "name": "OTP Tester"})
+    assert r.status_code == 429, r.text
+    body = r.json()
+    msg = body.get("message") or body.get("detail", "")
+    assert "wait" in msg.lower() or "resend" in msg.lower() or "seconds" in msg.lower()
+    print(f"  resend blocked by cooldown: {msg}")
+
+
+def test_send_otp_response_includes_resend_after():
+    email = f"resend_test_{int(time.time())}@test.com"
+    r = httpx.post(f"{BASE}/auth/send-otp", json={"email": email, "name": "Resend Tester"})
     assert r.status_code == 200, r.text
-    print("  resend ok, old OTP invalidated")
+    body = r.json()
+    assert "resend_after" in body, f"Missing resend_after in response: {body}"
+    assert isinstance(body["resend_after"], int) and body["resend_after"] > 0
+    print(f"  send-otp response: resend_after={body['resend_after']}")
 
 
 def test_send_otp_duplicate_email():
@@ -96,18 +109,20 @@ def test_login_with_new_user():
 if __name__ == "__main__":
     print("1. send_otp")
     test_send_otp()
-    print("2. resend otp (old invalidated)")
+    print("2. resend otp blocked by cooldown")
     test_send_otp_resends_and_invalidates()
-    print("3. send_otp to registered email")
+    print("3. send_otp response includes resend_after")
+    test_send_otp_response_includes_resend_after()
+    print("4. send_otp to registered email")
     test_send_otp_duplicate_email()
-    print("4. verify wrong code")
+    print("5. verify wrong code")
     test_verify_wrong_code()
-    print("5. verify correct code")
+    print("6. verify correct code")
     test_verify_correct_code()
-    print("6. signup without otp")
+    print("7. signup without otp")
     test_signup_without_otp()
-    print("7. signup after otp")
+    print("8. signup after otp")
     test_signup_after_otp()
-    print("8. login with new user")
+    print("9. login with new user")
     test_login_with_new_user()
     print("\nAll integration tests passed!")

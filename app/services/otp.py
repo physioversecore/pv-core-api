@@ -33,14 +33,28 @@ def _render_otp_email(name: str, code: str) -> str:
     )
 
 
-async def send_otp(db: Prisma, email: str, name: str = "there", purpose: str = "signup") -> bool:
+async def send_otp(
+    db: Prisma, email: str, name: str = "there", purpose: str = "signup"
+) -> tuple[bool, int]:
+    now = datetime.now(timezone.utc)
+
+    latest_unused = await db.emailverification.find_first(
+        where={"email": email, "purpose": purpose, "used": False},
+        order={"createdAt": "desc"},
+    )
+
+    if latest_unused:
+        elapsed = (now - latest_unused.createdAt.replace(tzinfo=timezone.utc)).total_seconds()
+        remaining = settings.otp_resend_cooldown_seconds - elapsed
+        if remaining > 0:
+            return False, int(remaining)
+
     await db.emailverification.update_many(
         where={"email": email, "purpose": purpose, "used": False},
         data={"used": True},
     )
 
     code = _generate_code()
-    now = datetime.now(timezone.utc)
     await db.emailverification.create(
         data={
             "email": email,
@@ -52,11 +66,12 @@ async def send_otp(db: Prisma, email: str, name: str = "there", purpose: str = "
 
     html = _render_otp_email(name, code)
     provider = get_email_provider()
-    return await provider.send(
+    sent = await provider.send(
         to=email,
         subject=f"Your {settings.smtp_from_name} verification code",
         html=html,
     )
+    return sent, settings.otp_resend_cooldown_seconds
 
 
 async def verify_otp(db: Prisma, email: str, code: str, purpose: str = "signup") -> bool:

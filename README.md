@@ -141,6 +141,8 @@ app/
   models/                # Pydantic request/response schemas (18 files)
   routers/               # API route handlers (15 files)
   services/              # Business logic layer (19 files)
+  services/email/        # Email provider system (abstract base + SMTP + log fallback)
+  templates/             # Jinja2 email templates (OTP verification)
   rate_limit/            # Distributed rate limiting system (12 files)
     config.py            # Rate limiting rules & configuration
     storage.py           # Redis + Memory storage backends
@@ -168,7 +170,9 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 ### Authentication
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
-| POST | `/api/v1/auth/signup` | Register new user | Public |
+| POST | `/api/v1/auth/send-otp` | Send 6-digit OTP to email | Public |
+| POST | `/api/v1/auth/verify-otp` | Verify OTP code | Public |
+| POST | `/api/v1/auth/signup` | Register new user (requires prior email verification) | Public |
 | POST | `/api/v1/auth/login` | Login, returns JWT | Public |
 | GET | `/api/v1/auth/me` | Get current user profile | Authenticated |
 | PUT | `/api/v1/auth/me` | Update profile | Authenticated |
@@ -321,6 +325,16 @@ Includes: users CRUD, therapist management, patient management, dashboard stats,
 | `RATE_LIMIT_DEFAULT_LIMIT` | `100` | Default requests per window |
 | `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window size in seconds |
 | `RATE_LIMIT_STORAGE_BACKEND` | `redis` | Storage backend (`redis` or `memory`) |
+| `SMTP_HOST` | `smtp.gmail.com` | SMTP server host |
+| `SMTP_PORT` | `587` | SMTP server port |
+| `SMTP_USER` | (empty) | SMTP username/email (empty = log OTP to console) |
+| `SMTP_PASSWORD` | (empty) | SMTP password (empty = log OTP to console) |
+| `SMTP_FROM_NAME` | `Sahayatri Physio` | Sender display name |
+| `SMTP_FROM_EMAIL` | `noreply@sahayatri.np` | Sender email address |
+| `SMTP_USE_TLS` | `true` | Enable STARTTLS |
+| `OTP_EXPIRE_MINUTES` | `5` | OTP code expiry in minutes |
+| `OTP_LENGTH` | `6` | OTP code digit count |
+| `OTP_MAX_ATTEMPTS` | `5` | Max verification attempts before code expires |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Postgres password (prod only) |
 
 ---
@@ -331,9 +345,12 @@ Includes: users CRUD, therapist management, patient management, dashboard stats,
 uv run pytest                   # run all tests
 uv run pytest test/test_auth.py # run single file
 uv run pytest -k "login"        # run by name pattern
+uv run python -m test.test_otp_integration  # integration tests (requires live server at :9292)
 ```
 
 Tests are **fully mocked** — no database required. `test/conftest.py` builds a fake FastAPI app with `MagicMock` DB. Fixtures: `client`, `patient_client`, `therapist_client`, `admin_client`.
+
+Integration tests (`test/test_otp_integration.py`) run against the live server and verify the full OTP → signup → login flow end-to-end.
 
 ---
 
@@ -351,7 +368,7 @@ All dependencies are tracked in `pyproject.toml` and `uv.lock`.
 
 ## Database Schema (Prisma)
 
-20+ models in `prisma/schema.prisma` with 14 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`.
+20+ models in `prisma/schema.prisma` with 14 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`, `EmailVerification`.
 
 After modifying `prisma/schema.prisma`:
 

@@ -42,6 +42,8 @@ app/
   models/                # Pydantic request/response schemas (18 files)
   routers/               # API route handlers (15 files)
   services/              # Business logic layer (19 files)
+  services/email/        # Email provider system (abstract base + SMTP + log fallback)
+  templates/             # Jinja2 email templates (OTP verification)
   rate_limit/            # Distributed rate limiting system (12 files)
     __init__.py          # Public API, init_rate_limiting()
     config.py            # RateLimitRule, RateLimitConfig, endpoint/role defaults
@@ -97,7 +99,9 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 ### Auth
 | Method | Path | Access |
 |---|---|---|
-| POST | `/auth/signup` | Public |
+| POST | `/auth/send-otp` | Public (sends 6-digit OTP to email) |
+| POST | `/auth/verify-otp` | Public (verifies OTP code) |
+| POST | `/auth/signup` | Public (requires prior email verification) |
 | POST | `/auth/login` | Public |
 | GET  | `/auth/me` | Authenticated |
 | PUT  | `/auth/me` | Authenticated |
@@ -266,10 +270,67 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 | `ServiceArea` | Geographic service areas |
 | `TherapistServiceArea` | M2M linking therapists to service areas |
 | `ActivityLog` | Admin activity audit trail |
+| `EmailVerification` | OTP codes for email verification (email, code, purpose, expiresAt, used, attempts) |
 
 ### Enums
 
 `Role` (PATIENT/THERAPIST/ADMIN), `UserStatus` (PENDING/APPROVED/REJECTED), `SessionStatus` (SCHEDULED/IN_PROGRESS/COMPLETED/CANCELLED/RESCHEDULE_REQUESTED/DECLINE_REQUESTED), `SessionType` (HOME_VISIT/CLINIC), `ProductCategory` (EQUIPMENT/MEDICINE/NUTRITION), `CartItemType` (BUY/RENT/MEDICINE/NUTRITION), `CaseSource` (PATIENT_SUBMITTED/THERAPIST_SUBMITTED/ADMIN_MANUAL), `RefundReason` (NO_SHOW/DOUBLE_CHARGE/SERVICE_QUALITY/CANCELLATION), `RefundStatus` (PENDING/APPROVED/DENIED)
+
+---
+
+## Email Provider Architecture
+
+### Overview
+
+Pluggable email system for sending OTP verification codes and future transactional emails. Designed for easy provider swapping without code changes.
+
+### Components
+
+```
+app/services/email/
+  base.py    # Abstract EmailProvider + get_email_provider() factory
+  smtp.py    # SMTPEmailProvider (production — connects to SMTP server)
+  log.py     # LogEmailProvider (dev — logs OTP codes to console)
+app/services/otp.py      # OTP generate, send, verify logic
+app/templates/otp_email.html  # Branded HTML email template (Jinja2)
+```
+
+### Provider Selection
+
+`get_email_provider()` in `base.py` checks `SMTP_USER` and `SMTP_PASSWORD`:
+- Both set → returns `SMTPEmailProvider` (sends real emails)
+- Either empty → returns `LogEmailProvider` (logs OTP to console)
+
+No code changes needed to switch — just set env vars and restart.
+
+### OTP Flow
+
+1. Frontend calls `POST /auth/send-otp` with `{email, name}`
+2. `send_otp()` invalidates any previous unused OTP for that email+purpose
+3. Generates 6-digit code, stores in `EmailVerification` table with expiry
+4. Renders HTML email via Jinja2 template, sends via email provider
+5. Frontend shows OTP input screen
+6. User enters code → frontend calls `POST /auth/verify-otp`
+7. `verify_otp()` checks: code match, not expired, attempts < max
+8. On success, marks OTP as used
+9. Frontend calls `POST /auth/signup` → backend checks for a verified OTP record before creating account
+
+### SMTP Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `SMTP_HOST` | `smtp.gmail.com` | SMTP server host |
+| `SMTP_PORT` | `587` | SMTP server port |
+| `SMTP_USER` | (empty) | SMTP username (empty = log fallback) |
+| `SMTP_PASSWORD` | (empty) | SMTP password (empty = log fallback) |
+| `SMTP_FROM_NAME` | `Sahayatri Physio` | Sender display name |
+| `SMTP_FROM_EMAIL` | `noreply@sahayatri.np` | Sender email address |
+| `SMTP_USE_TLS` | `true` | Enable STARTTLS |
+| `OTP_EXPIRE_MINUTES` | `5` | OTP code expiry |
+| `OTP_LENGTH` | `6` | OTP digit count |
+| `OTP_MAX_ATTEMPTS` | `5` | Max verification attempts |
+
+For Gmail: generate an [App Password](https://myaccount.google.com/apppasswords) under Security → 2-Step Verification → App passwords.
 
 ---
 
@@ -284,6 +345,8 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 7. **Session enrichment** — `_enrich_session()` adds `therapistName`, `patientName`, `patientPhone` to session responses.
 8. **Distributed rate limiting** — Redis-backed Sliding Window Counter with atomic Lua scripts. Fail-open on Redis failure.
 9. **Structured logging** — JSON format in production, colored console in development. Request IDs propagated through context vars.
+10. **Pluggable email providers** — Abstract `EmailProvider` base with SMTP implementation. Auto-fallback to console logging when SMTP is unconfigured. OTP verification gates signup to prevent fake registrations.
+11. **OTP verification before signup** — `EmailVerification` model stores codes with TTL and attempt limits. Signup endpoint requires a verified record before creating the user account.
 
 ---
 

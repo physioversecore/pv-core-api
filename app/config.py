@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     otp_expire_minutes: int = 5
     otp_length: int = 6
     otp_max_attempts: int = 5
+    otp_resend_cooldown_seconds: int = 120
 
     class Config:
         env_file = ".env"
