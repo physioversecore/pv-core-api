@@ -65,10 +65,15 @@ from app.models import (
     ReviewListResponse,
     ReviewResponse,
     ScheduleReviewRequest,
+    SendOtpRequest,
     ServiceAreaCreate,
     ServiceAreaListResponse,
     ServiceAreaResponse,
     ServiceAreaUpdate,
+    ServiceCreate,
+    ServiceListResponse,
+    ServiceResponse,
+    ServiceUpdate,
     SessionCreate,
     SessionListResponse,
     SessionPaymentResponse,
@@ -92,6 +97,7 @@ from app.models import (
     UnblockRequest,
     UserResponse,
     UserUpdate,
+    VerifyOtpRequest,
     WorkingHoursResponse,
     WorkingHoursUpdate,
 )
@@ -205,6 +211,11 @@ from app.services import (
     update_working_hours,
     upsert_patient_profile,
     verify_password,
+    create_service,
+    get_service,
+    get_services,
+    update_service,
+    delete_service,
 )
 
 from app.routers import (
@@ -217,6 +228,7 @@ from app.routers import (
     products_router,
     reports_router,
     reviews_router,
+    service_router,
     sessions_router,
     therapists_router,
 )

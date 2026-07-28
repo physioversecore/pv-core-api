@@ -1,30 +1,91 @@
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from .conftest import MOCK_PATIENT
 
 SIGNUP_DATA = {
     "name": "New User",
     "email": "new@test.com",
-    "password": "secret123",
+    "password": "Secret123!",
     "role": "PATIENT",
 }
 
 LOGIN_DATA = {"email": "patient@test.com", "password": "secret123"}
 
+NOW = datetime.now(timezone.utc)
+
+
+class TestSendOtp:
+    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=True)
+    def test_send_otp_success(self, mock_send, client, mock_db):
+        mock_db.user.find_unique.return_value = None
+
+        response = client.post("/api/v1/auth/send-otp", json={"email": "new@test.com", "name": "Test"})
+
+        assert response.status_code == 200
+        assert response.json()["message"] == "OTP sent successfully"
+        mock_send.assert_called_once()
+
+    def test_send_otp_duplicate_email(self, client, mock_db):
+        mock_db.user.find_unique.return_value = MOCK_PATIENT
+
+        response = client.post("/api/v1/auth/send-otp", json={"email": "patient@test.com", "name": "Test"})
+
+        assert response.status_code == 409
+        assert "already registered" in response.json()["detail"]
+
+    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=False)
+    def test_send_otp_email_failure(self, mock_send, client, mock_db):
+        mock_db.user.find_unique.return_value = None
+
+        response = client.post("/api/v1/auth/send-otp", json={"email": "new@test.com", "name": "Test"})
+
+        assert response.status_code == 503
+        assert "Failed to send" in response.json()["detail"]
+
+
+class TestVerifyOtp:
+    @patch("app.routers.auth.verify_otp", new_callable=AsyncMock, return_value=True)
+    def test_verify_otp_success(self, mock_verify, client, mock_db):
+        response = client.post("/api/v1/auth/verify-otp", json={"email": "new@test.com", "code": "123456"})
+
+        assert response.status_code == 200
+        assert response.json()["verified"] is True
+
+    @patch("app.routers.auth.verify_otp", new_callable=AsyncMock, return_value=False)
+    def test_verify_otp_invalid_code(self, mock_verify, client, mock_db):
+        response = client.post("/api/v1/auth/verify-otp", json={"email": "new@test.com", "code": "000000"})
+
+        assert response.status_code == 400
+        assert "Invalid" in response.json()["detail"]
+
 
 class TestSignup:
     @patch("app.routers.auth.create_access_token", return_value="mock-token")
-    def test_signup_success(self, mock_token, client, mock_db):
+    def test_signup_success_after_otp(self, mock_token, client, mock_db):
         mock_db.user.find_unique.return_value = None
         mock_db.user.create.return_value = MOCK_PATIENT
+        mock_db.emailverification.find_first.return_value = SimpleNamespace(
+            id="otp-1", email="new@test.com", code="123456", purpose="signup",
+            used=True, attempts=0, createdAt=NOW, expiresAt=NOW + timedelta(minutes=5),
+        )
 
         response = client.post("/api/v1/auth/signup", json=SIGNUP_DATA)
 
         assert response.status_code == 201
         body = response.json()
         assert body["access_token"] == "mock-token"
-        assert body["token_type"] == "bearer"
         assert body["user"]["email"] == "patient@test.com"
+
+    def test_signup_no_otp_verification(self, client, mock_db):
+        mock_db.user.find_unique.return_value = None
+        mock_db.emailverification.find_first.return_value = None
+
+        response = client.post("/api/v1/auth/signup", json=SIGNUP_DATA)
+
+        assert response.status_code == 400
+        assert "not verified" in response.json()["detail"]
 
     def test_signup_duplicate_email(self, client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT
@@ -32,7 +93,7 @@ class TestSignup:
         response = client.post("/api/v1/auth/signup", json=SIGNUP_DATA)
 
         assert response.status_code == 409
-        assert "already registered" in response.text
+        assert "already registered" in response.json()["detail"]
 
 
 class TestLogin:

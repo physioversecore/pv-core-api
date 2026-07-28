@@ -5,10 +5,12 @@ from prisma.enums import Role
 from app import (
     ChangePasswordRequest,
     LoginRequest,
+    SendOtpRequest,
     SignupRequest,
     TokenResponse,
     UserResponse,
     UserUpdate,
+    VerifyOtpRequest,
     authenticate_user,
     create_access_token,
     create_user,
@@ -19,8 +21,38 @@ from app import (
     update_user,
     verify_password,
 )
+from app.services.otp import send_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+@router.post("/send-otp")
+async def send_verification_otp(data: SendOtpRequest, db: Prisma = Depends(get_db)):
+    existing = await db.user.find_unique(where={"email": data.email})
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+
+    sent = await send_otp(db, email=data.email, name=data.name, purpose="signup")
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send verification email. Please try again.",
+        )
+    return {"message": "OTP sent successfully"}
+
+
+@router.post("/verify-otp")
+async def verify_email_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db)):
+    valid = await verify_otp(db, email=data.email, code=data.code, purpose="signup")
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code",
+        )
+    return {"verified": True}
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -30,6 +62,17 @@ async def signup(data: SignupRequest, db: Prisma = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
+        )
+
+    verified = await verify_otp(db, email=data.email, code="__skip__", purpose="signup")
+    last_otp = await db.emailverification.find_first(
+        where={"email": data.email, "purpose": "signup", "used": True},
+        order={"createdAt": "desc"},
+    )
+    if not last_otp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not verified. Please verify your email first.",
         )
 
     user_data = data.model_dump(exclude={"password"})

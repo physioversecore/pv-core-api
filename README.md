@@ -1,18 +1,20 @@
 # Sahayatri Physio API
 
-Backend API for the Sahayatri Physiotherapy platform. Built with **Python**, **FastAPI**, and **Prisma ORM** (PostgreSQL). Supports Patients, Therapists, and Admin roles with session booking, product shop, cart, payments, and reporting.
+Backend API for the Sahayatri Physiotherapy platform. Built with **Python 3.13**, **FastAPI**, and **Prisma ORM** (PostgreSQL). Supports Patients, Therapists, and Admin roles with session booking, product shop, cart, payments, availability management, reporting, and comprehensive admin tools.
 
 ## Features
 
 - JWT-based authentication (signup, login, role-based access)
-- Therapist management (profiles, listings, approvals)
-- Session booking (home visit / clinic, scheduling, status tracking)
+- Therapist management (profiles, listings, approvals, verification)
+- Session booking (home visit / clinic, scheduling, reschedule, status tracking)
+- Therapist availability (working hours, slots, recurring patterns, block time off, audit log, block requests)
 - Product shop (equipment, medicine, nutrition — buy or rent)
 - Shopping cart with rental day calculation and delivery fee logic
-- Payment tracking
-- Patient progress reports
-- Admin dashboard (manage users, therapists, sessions, payments)
-- Distributed rate limiting (Redis-backed Sliding Window Counter)
+- Payment tracking and booking+payment combo flow
+- Patient progress reports with file uploads
+- Reviews and ratings
+- Admin dashboard (manage users, therapists, sessions, payments, refunds, complaints, service areas, performance, safety incidents, notifications, analytics, team, activity log, leaves)
+- Distributed rate limiting (Redis-backed Sliding Window Counter with atomic Lua scripts)
 - Auto-generated Swagger docs & ReDoc
 
 ---
@@ -22,12 +24,14 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python**, **F
 | Layer | Technology |
 |---|---|
 | Runtime | Python 3.13 |
-| Framework | FastAPI |
-| ORM | Prisma (Python) |
+| Framework | FastAPI (async) |
+| ORM | Prisma (Python client) |
 | Database | PostgreSQL 16 |
 | Cache/Rate Limiting | Redis 7 |
 | Auth | JWT (python-jose) + bcrypt |
-| Package mgr | uv |
+| Package mgr | uv (Astral) |
+| Validation | Pydantic v2 |
+| Testing | pytest + pytest-asyncio (fully mocked, no DB needed) |
 
 ---
 
@@ -97,7 +101,7 @@ docker compose -f docker-compose.prod.yml up --build -d
 - Multi-stage build for small image size
 - No source mount — fully self-contained
 - Auto-restart on failure
-- Schema auto-pushed on startup
+- Runs migrations + seeds on startup via entrypoint
 
 ### Stop
 
@@ -126,14 +130,18 @@ All endpoints are under `/api/v1/`.
 ```
 main.py                  # CLI entrypoint (uvicorn, reload via env var)
 app/
+  __init__.py            # Re-exports all public symbols
   main.py                # FastAPI app, CORS, lifespan, router includes, rate limit middleware
   config.py              # pydantic-settings (reads .env) — includes Redis & rate limit config
   database.py            # Prisma client singleton
-  deps.py                # JWT auth dependencies
-  models/                # Pydantic request/response schemas
-  routers/               # API route handlers
-  services/              # Business logic layer
-  rate_limit/            # Distributed rate limiting system (Redis-backed)
+  deps.py                # JWT auth deps, pagination, get_or_404
+  exceptions.py          # Global exception handlers
+  logging_config.py      # Structured (JSON) + Dev (colored) formatters
+  middleware.py           # RequestIDMiddleware (X-Request-ID, X-Response-Time)
+  models/                # Pydantic request/response schemas (18 files)
+  routers/               # API route handlers (15 files)
+  services/              # Business logic layer (19 files)
+  rate_limit/            # Distributed rate limiting system (12 files)
     config.py            # Rate limiting rules & configuration
     storage.py           # Redis + Memory storage backends
     algorithms.py        # Sliding Window Counter + Token Bucket
@@ -143,7 +151,10 @@ app/
     access_list.py       # Whitelist/blacklist with TTL
     metrics.py           # Prometheus-compatible metrics
 prisma/
-  schema.prisma          # Prisma ORM schema (14 models)
+  schema.prisma          # Prisma ORM schema (20+ models, 471 lines)
+  migrations/            # 14 migration directories
+scripts/                 # Seed scripts (12 total)
+test/                    # Test suite (14 files, fully mocked)
 Dockerfile               # Production multi-stage build
 Dockerfile.dev           # Development image with hot reload
 docker-compose.yml       # Dev: API + PostgreSQL
@@ -160,25 +171,31 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 | POST | `/api/v1/auth/signup` | Register new user | Public |
 | POST | `/api/v1/auth/login` | Login, returns JWT | Public |
 | GET | `/api/v1/auth/me` | Get current user profile | Authenticated |
+| PUT | `/api/v1/auth/me` | Update profile | Authenticated |
+| POST | `/api/v1/auth/change-password` | Change password | Authenticated |
+| POST | `/api/v1/auth/logout` | Logout | Public |
 
 ### Therapists
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
 | GET | `/api/v1/therapists` | List therapists | Public |
 | GET | `/api/v1/therapists/me` | My therapist profile | Therapist |
+| GET | `/api/v1/therapists/me/dashboard` | Therapist dashboard stats | Therapist |
 | POST | `/api/v1/therapists` | Create therapist profile | Therapist |
 | GET | `/api/v1/therapists/{id}` | Get therapist by ID | Public |
 | PUT | `/api/v1/therapists/{id}` | Update therapist profile | Owner/Admin |
 | DELETE | `/api/v1/therapists/{id}` | Delete therapist | Owner/Admin |
+| GET | `/api/v1/therapists/{id}/slots` | Get therapist slots | Authenticated |
 
 ### Sessions (Bookings)
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
 | POST | `/api/v1/sessions` | Book a session | Patient |
-| GET | `/api/v1/sessions` | List my sessions | Patient/Therapist/Admin |
+| GET | `/api/v1/sessions` | List sessions | Patient/Therapist/Admin |
 | GET | `/api/v1/sessions/{id}` | Get session details | Authenticated |
-| PUT | `/api/v1/sessions/{id}` | Update session | Patient/Admin |
+| PUT | `/api/v1/sessions/{id}` | Update session | Patient/Therapist/Admin |
 | DELETE | `/api/v1/sessions/{id}` | Cancel session | Patient/Admin |
+| PATCH | `/api/v1/sessions/{id}/reschedule` | Reschedule session | Patient |
 
 ### Shop (Products)
 | Method | Endpoint | Description | Access |
@@ -201,6 +218,7 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 ### Payments
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
+| POST | `/api/v1/payments/process` | Booking + payment combo | Patient |
 | POST | `/api/v1/payments` | Create payment | Authenticated |
 | GET | `/api/v1/payments` | List payments | User (own) / Admin (all) |
 | GET | `/api/v1/payments/{id}` | Get payment details | Authenticated |
@@ -209,20 +227,81 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 ### Reports
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
-| POST | `/api/v1/reports` | Create progress report | Therapist/Admin |
+| POST | `/api/v1/reports` | Create progress report (multipart) | Therapist/Admin |
 | GET | `/api/v1/reports` | List reports | Patient (own) / Therapist/Admin |
 | GET | `/api/v1/reports/{id}` | Get report details | Authenticated |
 | PUT | `/api/v1/reports/{id}` | Update report | Therapist/Admin |
 | DELETE | `/api/v1/reports/{id}` | Delete report | Therapist/Admin |
 
-### Admin
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/v1/admin/users` | List all users (filter by role) |
-| PUT | `/api/v1/admin/users/{id}/status` | Approve/reject therapist |
-| GET | `/api/v1/admin/payments` | List all payments |
-| GET | `/api/v1/admin/sessions` | List all sessions |
-| GET | `/api/v1/admin/therapists/pending` | List pending therapists |
+### Reviews
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/api/v1/reviews/therapists-to-rate` | Therapists awaiting review | Patient |
+| POST | `/api/v1/reviews` | Submit a review | Patient |
+| GET | `/api/v1/reviews` | List reviews | Authenticated |
+
+### Availability (24+ endpoints)
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET/PUT | `/api/v1/availability/working-hours` | Get/set working hours | Therapist |
+| POST | `/api/v1/availability/apply-schedule` | Apply schedule | Therapist |
+| GET | `/api/v1/availability` | Monthly availability grid | Therapist |
+| POST | `/api/v1/availability/slot` | Toggle single slot | Therapist |
+| POST | `/api/v1/availability/bulk` | Bulk toggle slots | Therapist |
+| POST | `/api/v1/availability/recurring` | Create recurring pattern | Therapist |
+| POST | `/api/v1/availability/open-month` | Open entire month | Therapist |
+| POST | `/api/v1/availability/block-date` | Block a date | Therapist |
+| POST | `/api/v1/availability/generate` | Generate slots | Therapist |
+| POST | `/api/v1/availability/block-range` | Block date range | Therapist |
+| POST | `/api/v1/availability/unblock` | Unblock dates | Therapist |
+| GET | `/api/v1/availability/slots` | Get available slots | Authenticated |
+| GET/POST | `/api/v1/availability/audit-log` | View/add audit entries | Therapist |
+| POST | `/api/v1/availability/block-request` | Request admin-approved block | Therapist |
+| GET | `/api/v1/availability/block-requests` | List block requests | Therapist/Admin |
+| PUT | `/api/v1/availability/block-requests/{id}/approve` | Approve block request | Admin |
+| PUT | `/api/v1/availability/block-requests/{id}/reject` | Reject block request | Admin |
+
+### Patients
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/api/v1/patients/me/profile` | Patient profile | Authenticated |
+| PUT | `/api/v1/patients/me/profile` | Update patient profile | Authenticated |
+| GET | `/api/v1/patients/me/dashboard` | Patient dashboard stats | Authenticated |
+| GET | `/api/v1/patients/me/referral` | Referral code | Authenticated |
+| GET | `/api/v1/patients/my-patients` | Therapist's patients | Therapist |
+
+### Earnings
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/api/v1/therapist/earnings/transactions` | Transaction history | Therapist |
+| GET | `/api/v1/therapist/earnings/payouts` | Payout history | Therapist |
+
+### Admin (60+ endpoints)
+Includes: users CRUD, therapist management, patient management, dashboard stats, bookings, complaints (CRUD, assign), service areas, performance, verifications, refunds, activity log, payments, payouts, notifications, team, leaves, incidents, analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
+
+### Settings
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/api/v1/settings/design-tokens` | Get design tokens | Public |
+| PUT | `/api/v1/settings/design-tokens` | Update design tokens | Admin |
+| GET | `/api/v1/settings/currencies` | Get currencies | Public |
+| PUT | `/api/v1/settings/currencies` | Update currencies | Admin |
+| GET | `/api/v1/settings/payment-methods` | Get payment methods | Public |
+| PUT | `/api/v1/settings/payment-methods` | Update payment methods | Admin |
+
+### Uploads
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/api/v1/uploads/{patient_id}/{filename}` | Download report file | Token-authenticated |
+| GET | `/api/v1/uploads/therapists/{id}/{filename}` | Download therapist media | Authenticated |
+| POST | `/api/v1/uploads/therapists/{id}` | Upload therapist media | Therapist/Admin |
+
+### Health
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/health` | Health check (DB + Redis) | Public |
+| GET | `/live` | Liveness probe | Public |
+| GET | `/ready` | Readiness probe (DB) | Public |
 
 ---
 
@@ -230,16 +309,31 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/sahayatri_physio` | PostgreSQL connection string |
-| `SECRET_KEY` | — | JWT signing secret (change in production!) |
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/physioversecore` | PostgreSQL connection string |
+| `SECRET_KEY` | `super-secret-key-change-in-production` | JWT signing secret |
 | `ALGORITHM` | `HS256` | JWT signing algorithm |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Token expiry in minutes (24h) |
+| `BACKEND_PORT` | `8000` | Server port |
 | `UVICORN_RELOAD` | `true` | Enable/disable hot reload |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string (rate limiting) |
+| `CORS_ORIGINS` | `["*"]` | Allowed CORS origins (JSON array) |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
 | `RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
 | `RATE_LIMIT_DEFAULT_LIMIT` | `100` | Default requests per window |
 | `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window size in seconds |
 | `RATE_LIMIT_STORAGE_BACKEND` | `redis` | Storage backend (`redis` or `memory`) |
+| `POSTGRES_PASSWORD` | `postgres` | Docker Postgres password (prod only) |
+
+---
+
+## Testing
+
+```sh
+uv run pytest                   # run all tests
+uv run pytest test/test_auth.py # run single file
+uv run pytest -k "login"        # run by name pattern
+```
+
+Tests are **fully mocked** — no database required. `test/conftest.py` builds a fake FastAPI app with `MagicMock` DB. Fixtures: `client`, `patient_client`, `therapist_client`, `admin_client`.
 
 ---
 
@@ -257,7 +351,7 @@ All dependencies are tracked in `pyproject.toml` and `uv.lock`.
 
 ## Database Schema (Prisma)
 
-14 models: `User`, `Therapist`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`.
+20+ models in `prisma/schema.prisma` with 14 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`.
 
 After modifying `prisma/schema.prisma`:
 

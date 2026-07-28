@@ -1,10 +1,12 @@
 from app.models.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    SendOtpRequest,
     SignupRequest,
     TokenResponse,
     UserResponse,
     UserUpdate,
+    VerifyOtpRequest,
 )
 from app.models.therapist import (
     TherapistCreate,
@@ -127,4 +129,10 @@ from app.models.refund import (
     RefundResponse,
     RefundStatsResponse,
     RefundUpdate,
+)
+from app.models.service import (
+    ServiceCreate,
+    ServiceListResponse,
+    ServiceResponse,
+    ServiceUpdate,
 )

@@ -8,6 +8,7 @@ from app.routers.payments import router as payments_router
 from app.routers.products import router as products_router
 from app.routers.reports import router as reports_router
 from app.routers.reviews import router as reviews_router
+from app.routers.service import router as service_router
 from app.routers.sessions import router as sessions_router
 from app.routers.settings import router as settings_router
 from app.routers.therapists import router as therapists_router

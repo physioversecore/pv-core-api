@@ -19,6 +19,18 @@ class Settings(BaseSettings):
 
     cors_origins: str = '["*"]'
 
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_name: str = "Sahayatri Physio"
+    smtp_from_email: str = "noreply@sahayatri.np"
+    smtp_use_tls: bool = True
+
+    otp_expire_minutes: int = 5
+    otp_length: int = 6
+    otp_max_attempts: int = 5
+
     class Config:
         env_file = ".env"
 

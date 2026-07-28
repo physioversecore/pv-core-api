@@ -45,10 +45,21 @@ async def dashboard(
 
 @router.get("", response_model=TherapistListResponse)
 async def list_therapists(
+    search: str | None = None,
+    city: str | None = None,
+    specialty: str | None = None,
+    gender: str | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: Prisma = Depends(get_db),
 ):
-    therapists, total = await get_therapists(db, **pagination)
+    therapists, total = await get_therapists(
+        db,
+        search=search,
+        city=city,
+        specialty=specialty,
+        gender=gender,
+        **pagination,
+    )
     return TherapistListResponse(
         therapists=[TherapistResponse.model_validate(t) for t in therapists],
         total=total,

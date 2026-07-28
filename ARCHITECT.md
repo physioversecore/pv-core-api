@@ -5,8 +5,8 @@
 PVC API is the backend for the Sahayatri Physiotherapy platform. Built with **Python 3.13**, **FastAPI**, and **Prisma ORM** (PostgreSQL). Supports three user roles:
 
 - **Patients** — Book sessions, shop products, track reports
-- **Therapists** — Manage schedules, submit reports, track earnings
-- **Admins** — Approve therapists, manage users, oversee bookings/payments
+- **Therapists** — Manage schedules/availability, submit reports, track earnings
+- **Admins** — Approve therapists, manage users, oversee bookings/payments, handle complaints/refunds, manage service areas, performance reviews, safety incidents, analytics, and platform settings
 
 ---
 
@@ -15,12 +15,14 @@ PVC API is the backend for the Sahayatri Physiotherapy platform. Built with **Py
 | Layer | Technology |
 |---|---|
 | Runtime | Python 3.13 |
-| Framework | FastAPI |
-| ORM | Prisma (Python) |
+| Framework | FastAPI (async) |
+| ORM | Prisma (Python client) |
 | Database | PostgreSQL 16 |
 | Cache/Rate Limiting | Redis 7 |
 | Auth | JWT (python-jose) + bcrypt |
-| Package mgr | uv |
+| Package mgr | uv (Astral) |
+| Validation | Pydantic v2 |
+| Testing | pytest + pytest-asyncio (fully mocked) |
 
 ---
 
@@ -34,10 +36,13 @@ app/
   config.py              # pydantic-settings (reads .env) — includes Redis & rate limit config
   database.py            # Prisma client singleton
   deps.py                # Reusable deps: JWT auth, pagination, get_or_404
-  models/                # Pydantic request/response schemas per domain
-  routers/               # Route handlers per domain
-  services/              # Business logic layer
-  rate_limit/            # Distributed rate limiting system (Redis-backed)
+  exceptions.py          # Global exception handlers (HTTPException, Validation, JWT, Prisma)
+  logging_config.py      # Structured (JSON) + Dev (colored) formatters
+  middleware.py           # RequestIDMiddleware (X-Request-ID, X-Response-Time)
+  models/                # Pydantic request/response schemas (18 files)
+  routers/               # API route handlers (15 files)
+  services/              # Business logic layer (19 files)
+  rate_limit/            # Distributed rate limiting system (12 files)
     __init__.py          # Public API, init_rate_limiting()
     config.py            # RateLimitRule, RateLimitConfig, endpoint/role defaults
     storage.py           # Abstract RateLimitStorage + RedisStorage + MemoryStorage
@@ -50,7 +55,10 @@ app/
     log.py               # Structured request logging
     exceptions.py        # RateLimitExceeded, RateLimitStorageError
 prisma/
-  schema.prisma          # Prisma schema (14 models)
+  schema.prisma          # Prisma schema (20+ models, 471 lines)
+  migrations/            # 14 migration directories
+scripts/                 # Seed scripts (12 total)
+test/                    # Test suite (14 files, fully mocked)
 ```
 
 ---
@@ -60,7 +68,7 @@ prisma/
 - **`app/__init__.py`** — Re-exports all public symbols from `models/`, `services/`, `routers/`, `deps.py`, `database.py`. Consumers always `from app import X`.
 - **Routers** — Handle HTTP concerns (parsing, validation, status codes, response shapes). Delegate all DB/business logic to services.
 - **Services** — Business logic and Prisma queries. No HTTP awareness.
-- **Models** — Pure Pydantic schemas. No DB or HTTP logic.
+- **Models** — Pure Pydantic request/response schemas. No DB or HTTP logic.
 
 ---
 
@@ -70,7 +78,7 @@ prisma/
 |---|---|
 | `get_current_user` | Decode JWT, return `User` or 401 |
 | `get_admin_user` | Wraps `get_current_user`, checks `role == ADMIN` |
-| `pagination_params` | Returns `{"skip": int, "limit": int}` from query params (defaults 0, 100) |
+| `pagination_params` | Returns `{"skip": int, "limit": int}` from query params (defaults 0, 100; max 200) |
 | `get_or_404(db, model, id)` | Generic find-or-404; works for any Prisma model |
 
 ### Rate Limiting Dependencies (`app/rate_limit/dependencies.py`)
@@ -94,6 +102,7 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 | GET  | `/auth/me` | Authenticated |
 | PUT  | `/auth/me` | Authenticated |
 | POST | `/auth/change-password` | Authenticated |
+| POST | `/auth/logout` | Public |
 
 ### Therapists
 | Method | Path | Access |
@@ -101,9 +110,13 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 | GET  | `/therapists` | Public |
 | POST | `/therapists` | Therapist |
 | GET  | `/therapists/me` | Therapist |
+| GET  | `/therapists/me/dashboard` | Therapist |
+| GET  | `/therapists/me/profile` | Therapist |
+| PUT  | `/therapists/me/profile` | Therapist |
 | GET  | `/therapists/{id}` | Public |
 | PUT  | `/therapists/{id}` | Owner/Admin |
 | DEL  | `/therapists/{id}` | Owner/Admin |
+| GET  | `/therapists/{id}/slots` | Authenticated |
 
 ### Sessions
 | Method | Path | Access |
@@ -111,8 +124,9 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 | POST | `/sessions` | Patient |
 | GET  | `/sessions` | Patient/Therapist/Admin |
 | GET  | `/sessions/{id}` | Authenticated |
-| PUT  | `/sessions/{id}` | Patient/Admin |
+| PUT  | `/sessions/{id}` | Patient/Therapist/Admin |
 | DEL  | `/sessions/{id}` | Patient/Admin |
+| PATCH | `/sessions/{id}/reschedule` | Patient |
 
 ### Products
 | Method | Path | Access |
@@ -135,6 +149,7 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 ### Payments
 | Method | Path | Access |
 |---|---|---|
+| POST | `/payments/process` | Patient (booking+payment combo) |
 | POST | `/payments` | Authenticated |
 | GET  | `/payments` | User (own) / Admin (all) |
 | GET  | `/payments/{id}` | Authenticated |
@@ -143,30 +158,118 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 ### Reports
 | Method | Path | Access |
 |---|---|---|
-| POST | `/reports` | Therapist/Admin |
+| POST | `/reports` | Therapist/Admin (multipart) |
 | GET  | `/reports` | Patient (own) / Therapist+Admin (by patient_id) |
+| GET  | `/reports/therapist` | Therapist/Admin |
 | GET  | `/reports/{id}` | Authenticated |
 | PUT  | `/reports/{id}` | Therapist/Admin |
 | DEL  | `/reports/{id}` | Therapist/Admin |
 
-### Admin
+### Reviews
 | Method | Path | Access |
 |---|---|---|
-| GET  | `/admin/users` | Admin |
-| PUT  | `/admin/users/{id}/status` | Admin |
-| GET  | `/admin/therapists/pending` | Admin |
+| GET  | `/reviews/therapists-to-rate` | Patient |
+| POST | `/reviews` | Patient |
+| GET  | `/reviews` | Authenticated |
+
+### Patients
+| Method | Path | Access |
+|---|---|---|
+| GET  | `/patients/me/profile` | Authenticated |
+| PUT  | `/patients/me/profile` | Authenticated |
+| GET  | `/patients/me/dashboard` | Authenticated |
+| GET  | `/patients/me/referral` | Authenticated |
+| GET  | `/patients/my-patients` | Therapist |
+
+### Earnings
+| Method | Path | Access |
+|---|---|---|
+| GET  | `/therapist/earnings/transactions` | Therapist |
+| GET  | `/therapist/earnings/payouts` | Therapist |
+
+### Availability (24+ endpoints)
+| Method | Path | Access |
+|---|---|---|
+| GET/PUT | `/availability/working-hours` | Therapist |
+| POST | `/availability/apply-schedule` | Therapist |
+| GET  | `/availability` | Therapist (monthly grid) |
+| POST | `/availability/slot` | Therapist (toggle) |
+| POST | `/availability/bulk` | Therapist (bulk toggle) |
+| POST | `/availability/recurring` | Therapist |
+| GET  | `/availability/recurring` | Therapist |
+| DEL/PUT | `/availability/recurring/{id}` | Therapist |
+| POST | `/availability/open-month` | Therapist |
+| POST | `/availability/block-date` | Therapist |
+| POST | `/availability/generate` | Therapist |
+| POST | `/availability/block-range` | Therapist |
+| POST | `/availability/unblock` | Therapist |
+| GET  | `/availability/slots` | Authenticated |
+| GET  | `/availability/working-days` | Therapist |
+| GET/POST | `/availability/audit-log` | Therapist |
+| DEL  | `/availability/audit-log/{id}` | Therapist |
+| POST | `/availability/block-request` | Therapist |
+| GET  | `/availability/block-requests` | Therapist/Admin |
+| PUT  | `/availability/block-requests/{id}/approve` | Admin |
+| PUT  | `/availability/block-requests/{id}/reject` | Admin |
+
+### Admin (60+ endpoints across admin + admin_extras)
+Includes: users CRUD, therapist management (list, create, approve, reject, suspend), patient management, dashboard stats/earnings/recent activity, bookings, complaints (CRUD, assign), service areas (CRUD, assign therapists), performance (list, detail, update, resolve, schedule review, remove), verifications (CRUD, suspend), refunds (CRUD, stats, manual cases, assign), activity log, payments management, payouts, notifications, team management, leaves, incidents (escalate/resolve), analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
+
+### Settings
+| Method | Path | Access |
+|---|---|---|
+| GET  | `/settings/design-tokens` | Public |
+| PUT  | `/settings/design-tokens` | Admin |
+| GET  | `/settings/currencies` | Public |
+| PUT  | `/settings/currencies` | Admin |
+| GET  | `/settings/payment-methods` | Public |
+| PUT  | `/settings/payment-methods` | Admin |
+
+### Uploads
+| Method | Path | Access |
+|---|---|---|
+| GET  | `/uploads/{patient_id}/{filename}?token=...` | Token-authenticated |
+| GET  | `/uploads/therapists/{id}/{filename}` | Authenticated |
+| POST | `/uploads/therapists/{id}` | Therapist/Admin |
+
+### Health
+| Method | Path | Access |
+|---|---|---|
+| GET  | `/health` | Public (checks DB + Redis) |
+| GET  | `/live` | Public (always ok) |
+| GET  | `/ready` | Public (checks DB, 503 if down) |
 
 ---
 
-## Database Schema (8 models)
+## Database Schema (20+ models)
 
-- **User** — `id, name, email, password, role, city, phone, specialty, status`
-- **Therapist** — `id, userId, name, specialty, city, gender, rating, reviews, price, experience, bio`
-- **Product** — `id, name, category, price, rentPerDay, inStock, emoji, description, imageUrl`
-- **Session** — `id, therapistId, patientId, date, time, type, status, address, fee, notes`
-- **Report** — `id, patientId, sessionId, title, content, fileUrl`
-- **Payment** — `id, userId, amount, status, method, sessionId`
-- **CartItem** — `id, userId, productId, type, quantity, rentalDays`
+| Model | Purpose |
+|---|---|
+| `User` | Patients, therapists, admins (role enum: PATIENT/THERAPIST/ADMIN) |
+| `PatientProfile` | Extended patient profile (address, history, gender, notifications) |
+| `Therapist` | Therapist profiles (linked 1:1 to User) |
+| `Verification` | Therapist document verification records |
+| `Product` | Equipment, medicine, nutrition catalog |
+| `Session` | Booked therapy sessions with status tracking |
+| `Review` | Patient reviews (unique per session) |
+| `Report` | Patient reports with optional file attachments |
+| `Payment` | Payment records (sessions + product purchases) |
+| `CartItem` | Shopping cart items |
+| `Setting` | Key-value store (design tokens, currencies, working hours) |
+| `AvailabilitySlot` | Therapist time slots (unique per therapist+date+time) |
+| `RecurringPattern` | Therapist recurring availability patterns |
+| `AvailabilityBlock` | Therapist block-time-off records |
+| `AuditLogEntry` | Availability change audit trail |
+| `ScheduleBlockRequest` | Therapist requests for admin-approved time blocks |
+| `Complaint` | Complaint/dispute records |
+| `Refund` | Refund requests and tracking |
+| `ServiceArea` | Geographic service areas |
+| `TherapistServiceArea` | M2M linking therapists to service areas |
+| `ActivityLog` | Admin activity audit trail |
+
+### Enums
+
+`Role` (PATIENT/THERAPIST/ADMIN), `UserStatus` (PENDING/APPROVED/REJECTED), `SessionStatus` (SCHEDULED/IN_PROGRESS/COMPLETED/CANCELLED/RESCHEDULE_REQUESTED/DECLINE_REQUESTED), `SessionType` (HOME_VISIT/CLINIC), `ProductCategory` (EQUIPMENT/MEDICINE/NUTRITION), `CartItemType` (BUY/RENT/MEDICINE/NUTRITION), `CaseSource` (PATIENT_SUBMITTED/THERAPIST_SUBMITTED/ADMIN_MANUAL), `RefundReason` (NO_SHOW/DOUBLE_CHARGE/SERVICE_QUALITY/CANCELLATION), `RefundStatus` (PENDING/APPROVED/DENIED)
 
 ---
 
@@ -177,8 +280,10 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 3. **DRY dependencies** — `pagination_params` and `get_or_404` eliminate repeated pagination + existence-check boilerplate.
 4. **`__init__.py` re-exports** — All public symbols are re-exported from `app/__init__.py`. Consumers always `from app import X`.
 5. **Flat route structure** — `/{resource}` and `/{resource}/{id}` pattern; no nested sub-resources.
-6. **Cart totals** — Computed in-memory: rental items use `price × qty × rentalDays`; delivery free above Rs 2,000.
-7. **Distributed rate limiting** — Redis-backed Sliding Window Counter with atomic Lua scripts. Fail-open on Redis failure.
+6. **Cart totals** — Computed in-memory: rental items use `price × qty × rentalDays`; delivery free above Rs 2,000, otherwise Rs 150.
+7. **Session enrichment** — `_enrich_session()` adds `therapistName`, `patientName`, `patientPhone` to session responses.
+8. **Distributed rate limiting** — Redis-backed Sliding Window Counter with atomic Lua scripts. Fail-open on Redis failure.
+9. **Structured logging** — JSON format in production, colored console in development. Request IDs propagated through context vars.
 
 ---
 
@@ -250,16 +355,6 @@ Zero race conditions. O(1) time per request.
 | `RateLimit-Reset` | Unix timestamp when window resets |
 | `Retry-After` | Seconds until retry (on 429) |
 
-### 429 Response
-
-```json
-{
-    "success": false,
-    "error": "Rate limit exceeded.",
-    "retry_after": 42
-}
-```
-
 ### Storage Backends
 
 | Backend | Use Case |
@@ -269,22 +364,13 @@ Zero race conditions. O(1) time per request.
 
 ### Failure Strategy
 
-**Fail-open**: If Redis is unreachable, requests are allowed through. Prevents rate limiting from becoming a single point of failure. The `storage_fallbacks` metric tracks when this happens.
+**Fail-open**: If Redis is unreachable, requests are allowed through. Prevents rate limiting from becoming a single point of failure.
 
-### Configuration (`.env`)
+### Access Lists
 
-```
-REDIS_URL=redis://localhost:6379/0
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_DEFAULT_LIMIT=100
-RATE_LIMIT_DEFAULT_WINDOW=60
-RATE_LIMIT_STORAGE_BACKEND=redis
-```
-
-### Middleware vs Dependency
-
-- **Middleware** (`RateLimitMiddleware`): Applied globally to all requests via `app.add_middleware()`. Resolves identifier from JWT or IP.
-- **Dependency** (`rate_limit()`): Applied per-route via `Depends(rate_limit(limit=20, window=60))`. For endpoint-specific overrides.
+- **Whitelist**: Identifiers bypass rate limiting entirely (e.g., internal services, monitoring)
+- **Blacklist**: Identifiers are blocked with 403 (e.g., known attackers)
+- Both support TTL-based expiration
 
 ### Metrics (Prometheus)
 
@@ -299,29 +385,7 @@ RATE_LIMIT_STORAGE_BACKEND=redis
 | `rate_limit_whitelist_hits` | counter | Whitelist bypass count |
 | `rate_limit_blacklist_hits` | counter | Blacklist block count |
 
-### Access Lists
+### Middleware vs Dependency
 
-- **Whitelist**: Identifiers bypass rate limiting entirely (e.g., internal services, monitoring)
-- **Blacklist**: Identifiers are blocked with 403 (e.g., known attackers)
-- Both support TTL-based expiration
-
-### Integration
-
-Initialized during FastAPI lifespan. On Redis failure, automatically degrades to `MemoryStorage`:
-
-```python
-# app/main.py lifespan
-if settings.rate_limit_enabled:
-    config = build_config(redis_url=settings.redis_url, ...)
-    _limiter = create_limiter(config)
-    await _limiter.storage.connect()
-```
-
-Route-level usage (optional):
-```python
-from app.rate_limit import rate_limit
-
-@router.post("/auth/login")
-async def login(...= Depends(rate_limit(limit=20, window=60))):
-    ...
-```
+- **Middleware** (`RateLimitMiddleware`): Applied globally to all requests via `app.add_middleware()`. Resolves identifier from JWT or IP.
+- **Dependency** (`rate_limit()`): Applied per-route via `Depends(rate_limit(limit=20, window=60))`. For endpoint-specific overrides.

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#2F5D50 0%,#1E4035 100%);padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
+                {{ brand_name }}
+              </h1>
+              <p style="margin:6px 0 0;color:#D1E8DF;font-size:13px;">{{ tagline }}</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <p style="margin:0 0 8px;color:#1E2A2E;font-size:15px;">Hi {{ name }},</p>
+              <p style="margin:0 0 28px;color:#5A6B6F;font-size:14px;line-height:1.6;">
+                {{ body_line1 }}
+              </p>
+
+              <!-- OTP Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td align="center" style="background-color:#FBFBF8;border:2px dashed #E2962F;border-radius:12px;padding:28px 20px;">
+                    <p style="margin:0 0 10px;color:#8A9699;font-size:12px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">
+                      {{ otp_label }}
+                    </p>
+                    <p style="margin:0;color:#1E2A2E;font-size:36px;font-weight:800;letter-spacing:8px;">
+                      {{ otp_code }}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 8px;color:#5A6B6F;font-size:13px;line-height:1.5;">
+                {{ body_line2 }}
+              </p>
+              <p style="margin:0;color:#8A9699;font-size:12px;">
+                {{ body_line3 }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px;background-color:#EEF1ED;border-top:1px solid #D9DDD8;">
+              <p style="margin:0;color:#8A9699;font-size:11px;text-align:center;line-height:1.5;">
+                {{ footer_line1 }}<br/>
+                {{ footer_line2 }}
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -46,3 +46,13 @@ class UserUpdate(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class SendOtpRequest(BaseModel):
+    email: EmailStr
+    name: str = ""
+
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    code: str

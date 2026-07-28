@@ -469,3 +469,37 @@ model ActivityLog {
   @@index([targetType, targetId])
   @@index([createdAt])
 }
+
+enum ServiceCategory {
+  CLINICAL
+  SHOP
+}
+
+model Service {
+  id          String          @id @default(cuid())
+  name        String
+  description String
+  category    ServiceCategory
+  iconName    String          @default("")
+  isActive    Boolean         @default(true)
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  purpose   String   @default("signup")
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+}

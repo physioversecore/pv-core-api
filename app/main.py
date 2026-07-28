@@ -31,6 +31,7 @@ from app.routers import (
     products_router,
     reports_router,
     reviews_router,
+    service_router,
     sessions_router,
     settings_router,
     therapists_router,
@@ -133,6 +134,7 @@ app.include_router(uploads_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")
 app.include_router(availability_router, prefix="/api/v1")
+app.include_router(service_router, prefix="/api/v1")
 
 
 @app.get("/health")

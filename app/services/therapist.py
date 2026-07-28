@@ -5,11 +5,32 @@ from prisma import Prisma
 from app.services.patient import generate_referral_code
 
 
-async def get_therapists(db: Prisma, skip: int = 0, limit: int = 100):
+async def get_therapists(
+    db: Prisma,
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+    city: str | None = None,
+    specialty: str | None = None,
+    gender: str | None = None,
+):
+    where = {}
+    if search:
+        where["name"] = {"contains": search, "mode": "insensitive"}
+    if city:
+        where["city"] = city
+    if specialty:
+        where["specialty"] = specialty
+    if gender:
+        where["gender"] = gender
+
     therapists = await db.therapist.find_many(
-        skip=skip, take=limit, order={"createdAt": "desc"}
+        where=where,
+        skip=skip,
+        take=limit,
+        order={"createdAt": "desc"},
     )
-    total = await db.therapist.count()
+    total = await db.therapist.count(where=where)
     return therapists, total
 
 
