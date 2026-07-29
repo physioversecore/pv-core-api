@@ -4,7 +4,9 @@ from prisma.enums import Role
 
 from app import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
+    ResetPasswordRequest,
     SendOtpRequest,
     SignupRequest,
     TokenResponse,
@@ -51,7 +53,7 @@ async def send_verification_otp(data: SendOtpRequest, db: Prisma = Depends(get_d
 
 @router.post("/verify-otp")
 async def verify_email_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db)):
-    valid = await verify_otp(db, email=data.email, code=data.code, purpose="signup")
+    valid = await verify_otp(db, email=data.email, code=data.code, purpose=data.purpose)
     if not valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -125,6 +127,51 @@ async def update_my_profile(
 ):
     user = await update_user(db, current_user.id, data.model_dump(exclude_none=True))
     return UserResponse.model_validate(user)
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest, db: Prisma = Depends(get_db)):
+    existing = await db.user.find_unique(where={"email": data.email})
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email",
+        )
+
+    sent, resend_after = await send_otp(db, email=data.email, name=data.name or existing.name, purpose="password_reset")
+    if not sent and resend_after > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {resend_after} seconds before requesting a new code",
+        )
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send verification email. Please try again.",
+        )
+    return {"message": "OTP sent successfully", "resend_after": resend_after}
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(data: ResetPasswordRequest, db: Prisma = Depends(get_db)):
+    existing = await db.user.find_unique(where={"email": data.email})
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email",
+        )
+
+    last_otp = await db.emailverification.find_first(
+        where={"email": data.email, "purpose": "password_reset", "used": True},
+        order={"createdAt": "desc"},
+    )
+    if not last_otp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not verified. Please verify your email first.",
+        )
+
+    await update_user(db, existing.id, {"password": hash_password(data.new_password)})
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

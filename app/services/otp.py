@@ -15,9 +15,25 @@ def _generate_code() -> str:
     return "".join(random.choices(string.digits, k=settings.otp_length))
 
 
-def _render_otp_email(name: str, code: str) -> str:
+def _render_otp_email(name: str, code: str, purpose: str = "signup") -> str:
     with open(OTP_TEMPLATE_PATH) as f:
         tmpl = Template(f.read())
+
+    if purpose == "password_reset":
+        return tmpl.render(
+            brand_name="Sahayatri Physio",
+            tagline="Your physiotherapy recovery partner",
+            title="Reset your password",
+            name=name.split()[0] if name else "there",
+            body_line1="We received a request to reset your password. Use the code below to proceed. This code is valid for a limited time.",
+            otp_label="Your password reset code",
+            otp_code=code,
+            body_line2="If you didn't request a password reset, you can safely ignore this email.",
+            body_line3=f"This code expires in {settings.otp_expire_minutes} minutes.",
+            footer_line1="Sahayatri Physio — Home-visit physiotherapy in Nepal.",
+            footer_line2="This is an automated message, please do not reply.",
+        )
+
     return tmpl.render(
         brand_name="Sahayatri Physio",
         tagline="Your physiotherapy recovery partner",
@@ -64,7 +80,7 @@ async def send_otp(
         }
     )
 
-    html = _render_otp_email(name, code)
+    html = _render_otp_email(name, code, purpose)
     provider = get_email_provider()
     sent = await provider.send(
         to=email,

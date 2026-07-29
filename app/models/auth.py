@@ -56,3 +56,15 @@ class SendOtpRequest(BaseModel):
 class VerifyOtpRequest(BaseModel):
     email: EmailStr
     code: str
+    purpose: str = "signup"
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    name: str = ""
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str

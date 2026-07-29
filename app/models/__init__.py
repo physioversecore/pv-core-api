@@ -1,6 +1,8 @@
 from app.models.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
+    ResetPasswordRequest,
     SendOtpRequest,
     SignupRequest,
     TokenResponse,
