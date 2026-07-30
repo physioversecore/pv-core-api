@@ -26,6 +26,9 @@ SCRIPTS = [
     "seed-schedule.py",
     "seed-settings.py",
     "seed-refunds.py",
+    "seed-services.py",
+    "seed-referral-codes.py",
+    "seed-refunds.py",
 ]
 
 
