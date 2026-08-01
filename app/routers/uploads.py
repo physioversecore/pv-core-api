@@ -15,6 +15,7 @@ router = APIRouter(prefix="/uploads", tags=["Uploads"])
 UPLOAD_ROOT = Path(__file__).resolve().parent.parent.parent / "Upload"
 REPORTS_ROOT = UPLOAD_ROOT / "Reports"
 THERAPISTS_ROOT = UPLOAD_ROOT / "Therapists"
+APPLICATIONS_ROOT = UPLOAD_ROOT / "TherapistApplications"
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_REPORT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx"}
@@ -38,6 +39,69 @@ def _validate_filename(filename: str) -> str:
 def _validate_upload_size(content: bytes) -> None:
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail=f"File exceeds maximum size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+
+
+def _validate_application_session(session: str) -> str:
+    safe = _sanitize_id(session)
+    if len(safe) < 8 or len(safe) > 128:
+        raise HTTPException(status_code=400, detail="Invalid upload session")
+    return safe
+
+
+@router.post("/therapist-application")
+async def upload_therapist_application(
+    files: list[UploadFile] = File(...),
+    session: str = Form(""),
+):
+    """Public endpoint — lets a therapist attach verification documents during signup
+    (before an account/therapist record exists). Files are stored under a client-
+    generated upload session and returned as URLs to embed in the signup payload."""
+    session = _validate_application_session(session or "therapist-application")
+
+    app_dir = APPLICATIONS_ROOT / session
+    app_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded: list[dict] = []
+    for f in files:
+        ext = _validate_filename(f.filename or "file")
+        filename = f"{uuid.uuid4().hex}{ext}"
+        dest = app_dir / filename
+
+        content = await f.read()
+        _validate_upload_size(content)
+
+        with open(dest, "wb") as out:
+            out.write(content)
+
+        uploaded.append(
+            {
+                "url": f"/api/v1/uploads/applications/{session}/{filename}",
+                "fileName": f.filename or f"file{ext}",
+                "fileSize": len(content),
+            }
+        )
+
+    return {"urls": uploaded}
+
+
+@router.get("/applications/{session}/{filename}")
+async def serve_application_file(
+    session: str,
+    filename: str,
+    current_user=Depends(get_current_user),
+):
+    session = _validate_application_session(session)
+    file_path = (APPLICATIONS_ROOT / session / filename).resolve()
+
+    if not str(file_path).startswith(str(APPLICATIONS_ROOT.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    import mimetypes
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return FileResponse(str(file_path), media_type=media_type)
 
 
 @router.get("/{patient_id}/{filename}")

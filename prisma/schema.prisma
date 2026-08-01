@@ -104,6 +104,7 @@ model Therapist {
   specialty  String
   city       String
   gender     String
+  licenseNumber String?
   rating     Float    @default(0)
   reviews    Int      @default(0)
   price      Float
@@ -141,6 +142,9 @@ model Verification {
   therapistId  String
   therapist    Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
   documentType String
+  documentUrl  String?
+  fileName     String?
+  fileSize     Int?
   uploaded     DateTime @default(now())
   expires      DateTime?
   status       String   @default("Pending review")

@@ -8,6 +8,7 @@ from app.models.auth import (
     TokenResponse,
     UserResponse,
     UserUpdate,
+    VerificationDoc,
     VerifyOtpRequest,
 )
 from app.models.therapist import (

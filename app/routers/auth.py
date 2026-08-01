@@ -15,6 +15,7 @@ from app import (
     VerifyOtpRequest,
     authenticate_user,
     create_access_token,
+    create_therapist_signup,
     create_user,
     generate_referral_code,
     get_current_user,
@@ -82,15 +83,27 @@ async def signup(data: SignupRequest, db: Prisma = Depends(get_db)):
             detail="Email not verified. Please verify your email first.",
         )
 
-    user_data = data.model_dump(exclude={"password"})
-    user_data["role"] = getattr(Role, data.role.upper(), Role.PATIENT)
-    user_data["password"] = data.password
+    payload = data.model_dump()
+
+    user_data = {
+        "name": payload["name"],
+        "email": payload["email"],
+        "password": payload["password"],
+        "role": getattr(Role, data.role.upper(), Role.PATIENT),
+        "city": payload.get("city"),
+        "phone": payload.get("phone"),
+        "specialty": payload.get("specialty"),
+    }
 
     role_val = data.role.upper()
     if role_val == "PATIENT":
         user_data["referralCode"] = generate_referral_code()
 
     user = await create_user(db, user_data)
+
+    if role_val == "THERAPIST":
+        await create_therapist_signup(db, user, payload)
+
     token = create_access_token(user.id)
 
     return TokenResponse(

@@ -1,4 +1,11 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
+
+
+class VerificationDoc(BaseModel):
+    documentType: str = Field(..., max_length=64)
+    url: str
+    fileName: str | None = None
+    fileSize: int | None = None
 
 
 class SignupRequest(BaseModel):
@@ -9,6 +16,12 @@ class SignupRequest(BaseModel):
     city: str | None = None
     phone: str | None = None
     specialty: str | None = None
+    gender: str | None = None
+    license: str | None = None
+    experience: int | None = None
+    fee: float | None = None
+    bio: str | None = None
+    documents: list[VerificationDoc] | None = None
 
 
 class LoginRequest(BaseModel):

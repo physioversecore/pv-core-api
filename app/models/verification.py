@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field
 class VerificationCreate(BaseModel):
     therapistId: str
     documentType: str = Field(..., max_length=64)
+    documentUrl: str | None = None
+    fileName: str | None = None
+    fileSize: int | None = None
     expires: str | None = None
     severity: str | None = Field(default=None, max_length=16)
     reportedBy: str | None = None
@@ -23,6 +26,9 @@ class VerificationResponse(BaseModel):
     therapistId: str
     therapist: str
     documentType: str
+    documentUrl: str | None = None
+    fileName: str | None = None
+    fileSize: int | None = None
     uploaded: datetime
     expires: datetime | None = None
     status: str

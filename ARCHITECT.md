@@ -57,8 +57,8 @@ app/
     log.py               # Structured request logging
     exceptions.py        # RateLimitExceeded, RateLimitStorageError
 prisma/
-  schema.prisma          # Prisma schema (20+ models, 471 lines)
-  migrations/            # 14 migration directories
+  schema.prisma          # Prisma schema (23 models, 509 lines)
+  migrations/            # 17 migration directories
 scripts/                 # Seed scripts (12 total)
 test/                    # Test suite (14 files, fully mocked)
 ```
@@ -232,6 +232,8 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 ### Uploads
 | Method | Path | Access |
 |---|---|---|
+| POST | `/uploads/therapist-application` | Public (pre-signup verification documents, `files` + `session` Form fields) |
+| GET  | `/uploads/applications/{session}/{filename}` | Authenticated |
 | GET  | `/uploads/{patient_id}/{filename}?token=...` | Token-authenticated |
 | GET  | `/uploads/therapists/{id}/{filename}` | Authenticated |
 | POST | `/uploads/therapists/{id}` | Therapist/Admin |
@@ -251,8 +253,8 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 |---|---|
 | `User` | Patients, therapists, admins (role enum: PATIENT/THERAPIST/ADMIN) |
 | `PatientProfile` | Extended patient profile (address, history, gender, notifications) |
-| `Therapist` | Therapist profiles (linked 1:1 to User) |
-| `Verification` | Therapist document verification records |
+| `Therapist` | Therapist profiles (linked 1:1 to User, incl. `licenseNumber` from signup) |
+| `Verification` | Therapist document verification records (`documentUrl`/`fileName`/`fileSize` from signup uploads) |
 | `Product` | Equipment, medicine, nutrition catalog |
 | `Session` | Booked therapy sessions with status tracking |
 | `Review` | Patient reviews (unique per session) |
@@ -347,6 +349,7 @@ For Gmail: generate an [App Password](https://myaccount.google.com/apppasswords)
 9. **Structured logging** — JSON format in production, colored console in development. Request IDs propagated through context vars.
 10. **Pluggable email providers** — Abstract `EmailProvider` base with SMTP implementation. Auto-fallback to console logging when SMTP is unconfigured. OTP verification gates signup to prevent fake registrations.
 11. **OTP verification before signup** — `EmailVerification` model stores codes with TTL and attempt limits. Signup endpoint requires a verified record before creating the user account.
+12. **Pre-signup document uploads** — Therapists upload NMC license + certification *before* an account exists via the public `POST /uploads/therapist-application` (client-generated `session` key). Returned relative URLs are embedded in the signup payload; `create_therapist_signup()` (in `app/services/auth.py`) creates the `Therapist` profile (licenseNumber/fee/experience/bio) plus one `Verification` row per document (status `Pending review`, reportedBy `Self-signup`) so admin verification has real files + credentials to review. Documents are served to authenticated users via `GET /uploads/applications/{session}/{filename}` (path-traversal guarded).
 
 ---
 

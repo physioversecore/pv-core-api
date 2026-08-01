@@ -6,6 +6,7 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python 3.13**
 
 - JWT-based authentication (signup, login, role-based access)
 - Therapist management (profiles, listings, approvals, verification)
+- Therapist self-signup with document uploads (NMC license + certification) feeding admin verification
 - Session booking (home visit / clinic, scheduling, reschedule, status tracking)
 - Therapist availability (working hours, slots, recurring patterns, block time off, audit log, block requests)
 - Product shop (equipment, medicine, nutrition — buy or rent)
@@ -154,7 +155,7 @@ app/
     metrics.py           # Prometheus-compatible metrics
 prisma/
   schema.prisma          # Prisma ORM schema (20+ models, 471 lines)
-  migrations/            # 14 migration directories
+  migrations/            # 17 migration directories
 scripts/                 # Seed scripts (12 total)
 test/                    # Test suite (14 files, fully mocked)
 Dockerfile               # Production multi-stage build
@@ -296,6 +297,8 @@ Includes: users CRUD, therapist management, patient management, dashboard stats,
 ### Uploads
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
+| POST | `/api/v1/uploads/therapist-application` | Upload verification docs before signup (returns relative URLs to embed in signup payload) | Public |
+| GET | `/api/v1/uploads/applications/{session}/{filename}` | Serve a signup document | Authenticated |
 | GET | `/api/v1/uploads/{patient_id}/{filename}` | Download report file | Token-authenticated |
 | GET | `/api/v1/uploads/therapists/{id}/{filename}` | Download therapist media | Authenticated |
 | POST | `/api/v1/uploads/therapists/{id}` | Upload therapist media | Therapist/Admin |
@@ -368,7 +371,9 @@ All dependencies are tracked in `pyproject.toml` and `uv.lock`.
 
 ## Database Schema (Prisma)
 
-20+ models in `prisma/schema.prisma` with 14 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`, `EmailVerification`.
+20+ models in `prisma/schema.prisma` with 17 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`, `EmailVerification`.
+
+`Therapist.licenseNumber` and `Verification.documentUrl`/`fileName`/`fileSize` were added (migration `20260801000000_add_verification_documents`) so self-signup therapists' uploaded documents feed the admin verification review.
 
 After modifying `prisma/schema.prisma`:
 
