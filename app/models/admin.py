@@ -30,6 +30,15 @@ class AdminRecentActivity(_CamelModel):
     timestamp: str
 
 
+class AdminTherapistDocument(BaseModel):
+    id: str
+    documentType: str | None = None
+    documentUrl: str | None = None
+    fileName: str | None = None
+    fileSize: int | None = None
+    status: str | None = None
+
+
 class AdminTherapistData(BaseModel):
     id: str
     name: str
@@ -47,6 +56,7 @@ class AdminTherapistData(BaseModel):
     experience: int | None = None
     bio: str | None = None
     mediaUrls: str | None = None
+    documents: list[AdminTherapistDocument] | None = None
 
     class Config:
         from_attributes = True

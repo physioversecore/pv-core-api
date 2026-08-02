@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from .conftest import MOCK_PATIENT
+from .conftest import MOCK_PATIENT, MOCK_THERAPIST_USER
 
 SIGNUP_DATA = {
     "name": "New User",
@@ -30,11 +30,22 @@ class TestSendOtp:
 
     def test_send_otp_duplicate_email(self, client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT
+        mock_db.emailverification.find_first.return_value = None
 
         response = client.post("/api/v1/auth/send-otp", json={"email": "patient@test.com", "name": "Test"})
 
         assert response.status_code == 409
         assert "already registered" in response.json()["detail"]
+
+    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(True, 120))
+    def test_send_otp_registered_email_gets_conflict(self, mock_send, client, mock_db):
+        mock_db.user.find_unique.return_value = MOCK_PATIENT
+
+        response = client.post("/api/v1/auth/send-otp", json={"email": "patient@test.com", "name": "Test"})
+
+        assert response.status_code == 409
+        assert "already registered" in response.json()["detail"]
+        mock_send.assert_not_awaited()
 
     @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(False, 0))
     def test_send_otp_email_failure(self, mock_send, client, mock_db):
@@ -106,6 +117,57 @@ class TestSignup:
         assert "already registered" in response.json()["detail"]
 
 
+class TestTherapistSignupApproval:
+    def _pending_therapist(self):
+        return SimpleNamespace(
+            id="therapist-new-1",
+            name="New Therapist",
+            email="newtherapist@test.com",
+            password="x",
+            role="THERAPIST",
+            city="Kathmandu",
+            phone="9800000003",
+            specialty="Physiotherapy",
+            status="PENDING",
+            referralCode=None,
+            createdAt=NOW,
+            updatedAt=NOW,
+        )
+
+    @patch("app.routers.auth.create_therapist_signup", new_callable=AsyncMock)
+    @patch("app.routers.auth.send_application_received_email", new_callable=AsyncMock, return_value=True)
+    @patch("app.routers.auth.create_access_token")
+    def test_therapist_signup_no_token_pending_and_email_sent(
+        self, mock_token, mock_email, mock_cts, client, mock_db
+    ):
+        pending = self._pending_therapist()
+        mock_db.user.find_unique.return_value = None
+        mock_db.user.create.return_value = pending
+        mock_db.emailverification.find_first.return_value = SimpleNamespace(
+            id="otp-1", email="newtherapist@test.com", code="123456", purpose="signup",
+            used=True, attempts=0, createdAt=NOW, expiresAt=NOW + timedelta(minutes=5),
+        )
+
+        response = client.post(
+            "/api/v1/auth/signup",
+            json={
+                "name": "New Therapist",
+                "email": "newtherapist@test.com",
+                "password": "Secret123!",
+                "role": "THERAPIST",
+                "specialty": "Physiotherapy",
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["access_token"] is None
+        assert body["user"]["status"] == "PENDING"
+        mock_cts.assert_awaited_once()
+        mock_email.assert_awaited_once_with("newtherapist@test.com", "New Therapist")
+        mock_token.assert_not_called()
+
+
 class TestLogin:
     @patch("app.routers.auth.authenticate_user", return_value=MOCK_PATIENT)
     @patch("app.routers.auth.create_access_token", return_value="mock-token")
@@ -123,6 +185,44 @@ class TestLogin:
 
         assert response.status_code == 401
         assert "Invalid" in response.text
+
+
+class TestLoginTherapistApprovalGate:
+    def _therapist(self, status):
+        return SimpleNamespace(
+            id="therapist-user-1",
+            name="Test Therapist",
+            email="therapist@test.com",
+            password="x",
+            role="THERAPIST",
+            status=status,
+        )
+
+    @patch("app.routers.auth.authenticate_user")
+    def test_login_pending_therapist_blocked(self, mock_auth, client):
+        mock_auth.return_value = self._therapist("PENDING")
+
+        response = client.post("/api/v1/auth/login", json=LOGIN_DATA)
+
+        assert response.status_code == 403
+        assert "under review" in response.json()["detail"]
+
+    @patch("app.routers.auth.authenticate_user")
+    def test_login_rejected_therapist_blocked(self, mock_auth, client):
+        mock_auth.return_value = self._therapist("REJECTED")
+
+        response = client.post("/api/v1/auth/login", json=LOGIN_DATA)
+
+        assert response.status_code == 403
+        assert "not approved" in response.json()["detail"]
+
+    @patch("app.routers.auth.authenticate_user", return_value=MOCK_THERAPIST_USER)
+    @patch("app.routers.auth.create_access_token", return_value="mock-token")
+    def test_login_approved_therapist_allowed(self, mock_token, mock_auth, client):
+        response = client.post("/api/v1/auth/login", json=LOGIN_DATA)
+
+        assert response.status_code == 200
+        assert response.json()["access_token"] == "mock-token"
 
 
 class TestMe:

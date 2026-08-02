@@ -92,6 +92,18 @@ async def update_verification(db: Prisma, verification_id: str, data: dict):
         data=data,
         include={"therapist": {"include": {"user": True}}},
     )
+
+    # Approving or rejecting a verification controls whether the therapist can
+    # log in. Pending/rejected therapists are blocked from signing in.
+    new_status = data.get("status")
+    if new_status in ("Verified", "Rejected"):
+        user = updated.therapist.user if updated.therapist else None
+        if user:
+            await db.user.update(
+                where={"id": user.id},
+                data={"status": "APPROVED" if new_status == "Verified" else "REJECTED"},
+            )
+
     return _build_verification_response(updated)
 
 

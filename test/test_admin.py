@@ -30,8 +30,19 @@ MOCK_THERAPIST_USER_WITH_PROFILE = SimpleNamespace(
         price=1500.0,
         experience=5,
         bio="Experienced physiotherapist",
+        mediaUrls=None,
         createdAt=NOW,
         updatedAt=NOW,
+        verifications=[
+            SimpleNamespace(
+                id="ver-1",
+                documentType="NMC license",
+                documentUrl="/uploads/applications/sig/abc.pdf",
+                fileName="license.pdf",
+                fileSize=2048,
+                status="Verified",
+            ),
+        ],
     ),
 )
 
@@ -361,3 +372,70 @@ class TestDeletePatientAdmin:
     def test_delete_patient_forbidden_for_non_admin(self, patient_client):
         response = patient_client.delete("/api/v1/admin/patients/patient-1")
         assert response.status_code == 403
+
+
+class TestVerificationApproval:
+    def _verification(self):
+        return SimpleNamespace(
+            id="ver-1",
+            therapistId="therapist-1",
+            therapist=SimpleNamespace(
+                id="therapist-1",
+                name="Dr. Therapist",
+                user=SimpleNamespace(id="therapist-user-1", phone="9800000002"),
+            ),
+            documentType="NMC license",
+            documentUrl="http://example.com/doc.pdf",
+            fileName="license.pdf",
+            fileSize=1024,
+            uploaded=NOW,
+            expires=None,
+            status="Pending review",
+            severity="Medium",
+            reportedBy="Self-signup",
+            phone=None,
+            createdAt=NOW,
+            updatedAt=NOW,
+        )
+
+    def test_approve_verification_sets_user_approved(self, admin_client, mock_db):
+        verification = self._verification()
+        mock_db.verification.find_unique.return_value = verification
+        mock_db.verification.update.return_value = verification
+
+        response = admin_client.put(
+            "/api/v1/admin/verifications/ver-1", json={"status": "Verified"}
+        )
+
+        assert response.status_code == 200
+        mock_db.user.update.assert_called_once_with(
+            where={"id": "therapist-user-1"},
+            data={"status": "APPROVED"},
+        )
+
+    def test_reject_verification_sets_user_rejected(self, admin_client, mock_db):
+        verification = self._verification()
+        mock_db.verification.find_unique.return_value = verification
+        mock_db.verification.update.return_value = verification
+
+        response = admin_client.put(
+            "/api/v1/admin/verifications/ver-1", json={"status": "Rejected", "note": "Invalid"}
+        )
+
+        assert response.status_code == 200
+        mock_db.user.update.assert_called_once_with(
+            where={"id": "therapist-user-1"},
+            data={"status": "REJECTED"},
+        )
+
+    def test_other_status_does_not_touch_user(self, admin_client, mock_db):
+        verification = self._verification()
+        mock_db.verification.find_unique.return_value = verification
+        mock_db.verification.update.return_value = verification
+
+        response = admin_client.put(
+            "/api/v1/admin/verifications/ver-1", json={"status": "Expiring soon"}
+        )
+
+        assert response.status_code == 200
+        mock_db.user.update.assert_not_called()

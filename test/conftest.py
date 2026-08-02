@@ -209,7 +209,7 @@ MOCK_REVIEW = SimpleNamespace(
     session=MOCK_COMPLETED_SESSION,
 )
 
-TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification"]
+TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification"]
 METHODS = [
     "find_unique",
     "find_many",

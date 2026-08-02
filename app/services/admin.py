@@ -12,6 +12,17 @@ STATUS_MAP = {
 STATUS_REVERSE_MAP = {v: k for k, v in STATUS_MAP.items()}
 
 
+def _document_payload(v) -> dict:
+    return {
+        "id": v.id,
+        "documentType": v.documentType,
+        "documentUrl": v.documentUrl,
+        "fileName": v.fileName,
+        "fileSize": v.fileSize,
+        "status": v.status,
+    }
+
+
 async def get_admin_therapists(
     db: Prisma,
     *,
@@ -62,7 +73,7 @@ async def get_admin_therapists(
 
     users = await db.user.find_many(
         where=where,
-        include={"therapist": True},
+        include={"therapist": {"include": {"verifications": True}}},
         skip=None if needs_post_sort else skip,
         take=None if needs_post_sort else limit,
         order=order,
@@ -92,6 +103,9 @@ async def get_admin_therapists(
             "experience": t.experience if t else None,
             "bio": t.bio if t else None,
             "mediaUrls": t.mediaUrls if t else None,
+            "documents": [
+                _document_payload(v) for v in (t.verifications if t else [])
+            ],
         })
 
     if needs_post_sort:
@@ -103,7 +117,10 @@ async def get_admin_therapists(
 
 
 async def get_admin_therapist(db: Prisma, therapist_id: str):
-    t = await db.therapist.find_unique(where={"id": therapist_id})
+    t = await db.therapist.find_unique(
+        where={"id": therapist_id},
+        include={"verifications": True},
+    )
     if not t:
         return None
     u = await db.user.find_unique(where={"id": t.userId})
@@ -127,6 +144,7 @@ async def get_admin_therapist(db: Prisma, therapist_id: str):
         "experience": t.experience,
         "bio": t.bio,
         "mediaUrls": t.mediaUrls,
+        "documents": [_document_payload(v) for v in t.verifications],
     }
 
 

@@ -59,6 +59,11 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    if user.role == "THERAPIST" and user.status != "APPROVED":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your account is pending approval",
+        )
     return user
 
 
