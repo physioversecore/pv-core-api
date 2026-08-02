@@ -20,6 +20,7 @@ from app.routers import (
     reviews_router,
     sessions_router,
     therapists_router,
+    uploads_router,
 )
 
 
@@ -46,6 +47,7 @@ _test_app.include_router(payments_router, prefix="/api/v1")
 _test_app.include_router(admin_router, prefix="/api/v1")
 _test_app.include_router(reports_router, prefix="/api/v1")
 _test_app.include_router(reviews_router, prefix="/api/v1")
+_test_app.include_router(uploads_router, prefix="/api/v1")
 
 
 @_test_app.get("/health")

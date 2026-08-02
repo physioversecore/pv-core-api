@@ -363,3 +363,45 @@ async def upload_therapist_photo(
     )
 
     return {"url": url}
+
+
+@router.delete("/therapists/{therapist_id}/photo")
+async def delete_therapist_photo(
+    therapist_id: str,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Remove the profile photo for a therapist (own profile or admin).
+
+    Deletes any stored ``photo-*`` file from disk and strips it from the
+    therapist's mediaUrls, so the avatar disappears everywhere on the next
+    refresh."""
+    therapist_id = _sanitize_id(therapist_id)
+
+    therapist = await _resolve_therapist(db, therapist_id)
+    if not therapist:
+        raise HTTPException(status_code=404, detail="Therapist not found")
+
+    if current_user.role not in (Role.THERAPIST, Role.ADMIN):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if current_user.role == Role.THERAPIST and therapist.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    existing = [u.strip() for u in (therapist.mediaUrls or "").split(",") if u.strip()]
+    removed = [u for u in existing if u.split("/")[-1].split("?")[0].startswith("photo-")]
+    kept = [u for u in existing if u not in removed]
+
+    therapist_dir = THERAPISTS_ROOT / therapist.id
+    for url in removed:
+        filename = url.split("?")[0].split("/")[-1]
+        file_path = (therapist_dir / filename).resolve()
+        if str(file_path).startswith(str(THERAPISTS_ROOT.resolve())) and file_path.is_file():
+            file_path.unlink(missing_ok=True)
+
+    await db.therapist.update(
+        where={"id": therapist.id},
+        data={"mediaUrls": ",".join(kept)},
+    )
+
+    return {"success": True, "removed": len(removed)}
