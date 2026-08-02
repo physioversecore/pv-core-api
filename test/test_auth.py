@@ -17,8 +17,20 @@ NOW = datetime.now(timezone.utc)
 
 
 class TestSendOtp:
-    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(True, 120))
-    def test_send_otp_success(self, mock_send, client, mock_db):
+    @patch(
+        "app.routers.auth.create_otp",
+        new_callable=AsyncMock,
+        return_value={
+            "created": True,
+            "resend_after": 120,
+            "to": "new@test.com",
+            "name": "Test",
+            "code": "123456",
+            "purpose": "signup",
+        },
+    )
+    @patch("app.routers.auth.send_otp_email", new_callable=AsyncMock)
+    def test_send_otp_success(self, mock_email, mock_create, client, mock_db):
         mock_db.user.find_unique.return_value = None
 
         response = client.post("/api/v1/auth/send-otp", json={"email": "new@test.com", "name": "Test"})
@@ -26,44 +38,63 @@ class TestSendOtp:
         assert response.status_code == 200
         assert response.json()["message"] == "OTP sent successfully"
         assert response.json()["resend_after"] == 120
-        mock_send.assert_called_once()
+        mock_create.assert_awaited_once()
+        mock_email.assert_awaited_once_with("new@test.com", "Test", "123456", "signup")
 
     def test_send_otp_duplicate_email(self, client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT
-        mock_db.emailverification.find_first.return_value = None
 
         response = client.post("/api/v1/auth/send-otp", json={"email": "patient@test.com", "name": "Test"})
 
         assert response.status_code == 409
         assert "already registered" in response.json()["detail"]
 
-    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(True, 120))
-    def test_send_otp_registered_email_gets_conflict(self, mock_send, client, mock_db):
+    @patch("app.routers.auth.create_otp", new_callable=AsyncMock)
+    def test_send_otp_registered_email_gets_conflict(self, mock_create, client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT
 
         response = client.post("/api/v1/auth/send-otp", json={"email": "patient@test.com", "name": "Test"})
 
         assert response.status_code == 409
         assert "already registered" in response.json()["detail"]
-        mock_send.assert_not_awaited()
+        mock_create.assert_not_awaited()
 
-    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(False, 0))
-    def test_send_otp_email_failure(self, mock_send, client, mock_db):
-        mock_db.user.find_unique.return_value = None
-
-        response = client.post("/api/v1/auth/send-otp", json={"email": "new@test.com", "name": "Test"})
-
-        assert response.status_code == 503
-        assert "Failed to send" in response.json()["detail"]
-
-    @patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=(False, 90))
-    def test_send_otp_cooldown(self, mock_send, client, mock_db):
+    @patch(
+        "app.routers.auth.create_otp",
+        new_callable=AsyncMock,
+        return_value={"created": False, "resend_after": 90},
+    )
+    def test_send_otp_cooldown(self, mock_create, client, mock_db):
         mock_db.user.find_unique.return_value = None
 
         response = client.post("/api/v1/auth/send-otp", json={"email": "new@test.com", "name": "Test"})
 
         assert response.status_code == 429
         assert "90" in response.json()["detail"]
+
+    @patch(
+        "app.routers.auth.create_otp",
+        new_callable=AsyncMock,
+        return_value={
+            "created": True,
+            "resend_after": 120,
+            "to": "new@test.com",
+            "name": "Test",
+            "code": "654321",
+            "purpose": "password_reset",
+        },
+    )
+    @patch("app.routers.auth.send_otp_email", new_callable=AsyncMock)
+    def test_forgot_password_schedules_background_email(self, mock_email, mock_create, client, mock_db):
+        mock_db.user.find_unique.return_value = SimpleNamespace(
+            id="user-1", email="new@test.com", name="Test"
+        )
+
+        response = client.post("/api/v1/auth/forgot-password", json={"email": "new@test.com"})
+
+        assert response.status_code == 200
+        mock_create.assert_awaited_once()
+        mock_email.assert_awaited_once_with("new@test.com", "Test", "654321", "password_reset")
 
 
 class TestVerifyOtp:

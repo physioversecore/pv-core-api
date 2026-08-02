@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from datetime import datetime, timezone
 from prisma import Prisma
 from prisma.enums import Role
@@ -26,13 +26,17 @@ from app import (
     verify_password,
 )
 from app.services.email.notifications import send_application_received_email
-from app.services.otp import send_otp, verify_otp
+from app.services.otp import create_otp, send_otp_email, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/send-otp")
-async def send_verification_otp(data: SendOtpRequest, db: Prisma = Depends(get_db)):
+async def send_verification_otp(
+    data: SendOtpRequest,
+    background_tasks: BackgroundTasks,
+    db: Prisma = Depends(get_db),
+):
     existing = await db.user.find_unique(where={"email": data.email})
     if existing:
         # A registered email cannot request a signup code. Any signup flow for
@@ -42,18 +46,22 @@ async def send_verification_otp(data: SendOtpRequest, db: Prisma = Depends(get_d
             detail="Email already registered",
         )
 
-    sent, resend_after = await send_otp(db, email=data.email, name=data.name, purpose="signup")
-    if not sent and resend_after > 0:
+    result = await create_otp(db, email=data.email, name=data.name, purpose="signup")
+    if not result["created"]:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Please wait {resend_after} seconds before requesting a new code",
+            detail=f"Please wait {result['resend_after']} seconds before requesting a new code",
         )
-    if not sent:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Failed to send verification email. Please try again.",
-        )
-    return {"message": "OTP sent successfully", "resend_after": resend_after}
+    # Email delivery happens in the background so a slow SMTP server never
+    # blocks the signup flow.
+    background_tasks.add_task(
+        send_otp_email,
+        result["to"],
+        result["name"],
+        result["code"],
+        result["purpose"],
+    )
+    return {"message": "OTP sent successfully", "resend_after": result["resend_after"]}
 
 
 @router.post("/verify-otp")
@@ -68,7 +76,11 @@ async def verify_email_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db))
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def signup(data: SignupRequest, db: Prisma = Depends(get_db)):
+async def signup(
+    data: SignupRequest,
+    background_tasks: BackgroundTasks,
+    db: Prisma = Depends(get_db),
+):
     existing = await db.user.find_unique(where={"email": data.email})
     if existing:
         raise HTTPException(
@@ -113,14 +125,7 @@ async def signup(data: SignupRequest, db: Prisma = Depends(get_db)):
     # Therapist applications require admin approval before they can log in.
     # Do not issue a token until the admin sets their status to APPROVED.
     if role_val == "THERAPIST":
-        try:
-            await send_application_received_email(user.email, user.name)
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception(
-                "Failed to send application-received email to %s", user.email
-            )
+        background_tasks.add_task(send_application_received_email, user.email, user.name)
         return TokenResponse(
             access_token=None,
             user=UserResponse.model_validate(user),
@@ -175,7 +180,11 @@ async def update_my_profile(
 
 
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPasswordRequest, db: Prisma = Depends(get_db)):
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Prisma = Depends(get_db),
+):
     existing = await db.user.find_unique(where={"email": data.email})
     if not existing:
         raise HTTPException(
@@ -183,18 +192,22 @@ async def forgot_password(data: ForgotPasswordRequest, db: Prisma = Depends(get_
             detail="No account found with this email",
         )
 
-    sent, resend_after = await send_otp(db, email=data.email, name=data.name or existing.name, purpose="password_reset")
-    if not sent and resend_after > 0:
+    result = await create_otp(
+        db, email=data.email, name=data.name or existing.name, purpose="password_reset"
+    )
+    if not result["created"]:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Please wait {resend_after} seconds before requesting a new code",
+            detail=f"Please wait {result['resend_after']} seconds before requesting a new code",
         )
-    if not sent:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Failed to send verification email. Please try again.",
-        )
-    return {"message": "OTP sent successfully", "resend_after": resend_after}
+    background_tasks.add_task(
+        send_otp_email,
+        result["to"],
+        result["name"],
+        result["code"],
+        result["purpose"],
+    )
+    return {"message": "OTP sent successfully", "resend_after": result["resend_after"]}
 
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)

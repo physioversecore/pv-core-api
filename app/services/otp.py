@@ -6,7 +6,7 @@ from jinja2 import Template
 from prisma import Prisma
 
 from app.config import settings
-from app.services.email import get_email_provider
+from app.services.email.dispatch import dispatch_email
 
 OTP_TEMPLATE_PATH = "app/templates/otp_email.html"
 
@@ -49,9 +49,17 @@ def _render_otp_email(name: str, code: str, purpose: str = "signup") -> str:
     )
 
 
-async def send_otp(
+async def send_otp_email(to: str, name: str, code: str, purpose: str = "signup") -> None:
+    await dispatch_email(
+        to=to,
+        subject=f"Your {settings.smtp_from_name} verification code",
+        html=_render_otp_email(name, code, purpose),
+    )
+
+
+async def create_otp(
     db: Prisma, email: str, name: str = "there", purpose: str = "signup"
-) -> tuple[bool, int]:
+) -> dict:
     now = datetime.now(timezone.utc)
 
     latest_unused = await db.emailverification.find_first(
@@ -63,7 +71,7 @@ async def send_otp(
         elapsed = (now - latest_unused.createdAt.replace(tzinfo=timezone.utc)).total_seconds()
         remaining = settings.otp_resend_cooldown_seconds - elapsed
         if remaining > 0:
-            return False, int(remaining)
+            return {"created": False, "resend_after": int(remaining)}
 
     await db.emailverification.update_many(
         where={"email": email, "purpose": purpose, "used": False},
@@ -80,14 +88,14 @@ async def send_otp(
         }
     )
 
-    html = _render_otp_email(name, code, purpose)
-    provider = get_email_provider()
-    sent = await provider.send(
-        to=email,
-        subject=f"Your {settings.smtp_from_name} verification code",
-        html=html,
-    )
-    return sent, settings.otp_resend_cooldown_seconds
+    return {
+        "created": True,
+        "resend_after": settings.otp_resend_cooldown_seconds,
+        "to": email,
+        "name": name,
+        "code": code,
+        "purpose": purpose,
+    }
 
 
 async def verify_otp(db: Prisma, email: str, code: str, purpose: str = "signup") -> bool:

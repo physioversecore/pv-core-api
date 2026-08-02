@@ -148,6 +148,7 @@ model Verification {
   uploaded     DateTime @default(now())
   expires      DateTime?
   status       String   @default("Pending review")
+  note         String?
   severity     String?
   reportedBy   String?
   phone        String?

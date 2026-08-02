@@ -20,6 +20,7 @@ def _document_payload(v) -> dict:
         "fileName": v.fileName,
         "fileSize": v.fileSize,
         "status": v.status,
+        "note": getattr(v, "note", None),
     }
 
 

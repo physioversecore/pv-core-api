@@ -42,8 +42,8 @@ app/
   models/                # Pydantic request/response schemas (18 files)
   routers/               # API route handlers (15 files)
   services/              # Business logic layer (19 files)
-  services/email/        # Email provider system (abstract base + SMTP + log fallback)
-  templates/             # Jinja2 email templates (OTP verification)
+  services/email/        # Email system: provider base + SMTP + log fallback + fire-and-forget dispatch + notifications
+  templates/             # Jinja2 email templates (OTP, application received, account verified, application rejected)
   rate_limit/            # Distributed rate limiting system (12 files)
     __init__.py          # Public API, init_rate_limiting()
     config.py            # RateLimitRule, RateLimitConfig, endpoint/role defaults
@@ -254,7 +254,7 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 | `User` | Patients, therapists, admins (role enum: PATIENT/THERAPIST/ADMIN) |
 | `PatientProfile` | Extended patient profile (address, history, gender, notifications) |
 | `Therapist` | Therapist profiles (linked 1:1 to User, incl. `licenseNumber` from signup) |
-| `Verification` | Therapist document verification records (`documentUrl`/`fileName`/`fileSize` from signup uploads) |
+| `Verification` | Therapist document verification records (`documentUrl`/`fileName`/`fileSize` from signup uploads, `note` holds the admin's rejection reason) |
 | `Product` | Equipment, medicine, nutrition catalog |
 | `Session` | Booked therapy sessions with status tracking |
 | `Review` | Patient reviews (unique per session) |
@@ -284,17 +284,25 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 
 ### Overview
 
-Pluggable email system for sending OTP verification codes and future transactional emails. Designed for easy provider swapping without code changes.
+Pluggable email system for OTP verification, therapist application notifications, and admin verification outcomes. Designed for easy provider swapping without code changes.
+
+All sends are **fire-and-forget** — they are scheduled on FastAPI `BackgroundTasks`, never block or fail the request, and errors are only logged (see "Background Dispatch" below).
 
 ### Components
 
 ```
 app/services/email/
-  base.py    # Abstract EmailProvider + get_email_provider() factory
-  smtp.py    # SMTPEmailProvider (production — connects to SMTP server)
-  log.py     # LogEmailProvider (dev — logs OTP codes to console)
-app/services/otp.py      # OTP generate, send, verify logic
-app/templates/otp_email.html  # Branded HTML email template (Jinja2)
+  base.py            # Abstract EmailProvider + get_email_provider() factory
+  smtp.py            # SMTPEmailProvider (production — connects to SMTP server)
+  log.py             # LogEmailProvider (dev — logs emails to console)
+  dispatch.py        # dispatch_email() — fire-and-forget send, never raises
+  notifications.py   # send_application_received_email / send_account_verified_email / send_application_rejected_email
+app/services/otp.py  # create_otp (DB only) + send_otp_email (background-dispatched) + verify_otp
+app/templates/
+  otp_email.html                  # Branded OTP email (Jinja2)
+  application_received.html       # Therapist "application under review"
+  account_verified.html           # Therapist account verified (admin approval)
+  application_rejected.html       # Therapist application rejected (includes reason)
 ```
 
 ### Provider Selection
@@ -308,14 +316,38 @@ No code changes needed to switch — just set env vars and restart.
 ### OTP Flow
 
 1. Frontend calls `POST /auth/send-otp` with `{email, name}`
-2. `send_otp()` invalidates any previous unused OTP for that email+purpose
+2. `create_otp()` invalidates any previous unused OTP for that email+purpose
 3. Generates 6-digit code, stores in `EmailVerification` table with expiry
-4. Renders HTML email via Jinja2 template, sends via email provider
+4. The router schedules `send_otp_email()` on `BackgroundTasks` (renders Jinja2 template, sends via provider — never blocks the request)
 5. Frontend shows OTP input screen
 6. User enters code → frontend calls `POST /auth/verify-otp`
 7. `verify_otp()` checks: code match, not expired, attempts < max
 8. On success, marks OTP as used
 9. Frontend calls `POST /auth/signup` → backend checks for a verified OTP record before creating account
+
+### Background Dispatch
+
+Every email goes through `app/services/email/dispatch.py`:
+
+```python
+async def dispatch_email(to: str, subject: str, html: str) -> None:
+    try:
+        provider = get_email_provider()
+        await provider.send(to=to, subject=subject, html=html)
+    except Exception:
+        logger.exception(...)  # never raises
+```
+
+Routers schedule sends via `background_tasks.add_task(...)`:
+
+| Endpoint | Email |
+|---|---|
+| `POST /auth/send-otp` | `send_otp_email` (verification code) |
+| `POST /auth/signup` (THERAPIST) | `send_application_received_email` ("under review") |
+| `PUT /admin/verifications/{id}` (status → `Verified`, user not yet `APPROVED`) | `send_account_verified_email` |
+| `PUT /admin/verifications/{id}` (status → `Rejected`) | `send_application_rejected_email` (passes `note` as the reason) |
+
+Emails are secondary to the API's main flow — a slow or failing SMTP server never blocks signup, OTP verification, or the admin approval response.
 
 ### SMTP Configuration
 
@@ -350,6 +382,8 @@ For Gmail: generate an [App Password](https://myaccount.google.com/apppasswords)
 10. **Pluggable email providers** — Abstract `EmailProvider` base with SMTP implementation. Auto-fallback to console logging when SMTP is unconfigured. OTP verification gates signup to prevent fake registrations.
 11. **OTP verification before signup** — `EmailVerification` model stores codes with TTL and attempt limits. Signup endpoint requires a verified record before creating the user account.
 12. **Pre-signup document uploads** — Therapists upload NMC license + certification *before* an account exists via the public `POST /uploads/therapist-application` (client-generated `session` key). Returned relative URLs are embedded in the signup payload; `create_therapist_signup()` (in `app/services/auth.py`) creates the `Therapist` profile (licenseNumber/fee/experience/bio) plus one `Verification` row per document (status `Pending review`, reportedBy `Self-signup`) so admin verification has real files + credentials to review. Documents are served to authenticated users via `GET /uploads/applications/{session}/{filename}` (path-traversal guarded).
+13. **Fire-and-forget email dispatch** — All transactional emails (OTP, application received, account verified, application rejected) are sent through `dispatch_email()` scheduled on FastAPI `BackgroundTasks`. Sending never blocks or fails the request and errors are only logged, keeping emails secondary to the main API flow.
+14. **Persisted rejection reasons** — `Verification.note` stores the admin's rejection reason on `PUT /admin/verifications/{id}`. It is returned to the frontend (shown in the therapist detail sheet) and included in the rejection email.
 
 ---
 

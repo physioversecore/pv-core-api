@@ -9,6 +9,7 @@ class VerificationCreate(BaseModel):
     fileName: str | None = None
     fileSize: int | None = None
     expires: str | None = None
+    note: str | None = Field(default=None, max_length=2000)
     severity: str | None = Field(default=None, max_length=16)
     reportedBy: str | None = None
     phone: str | None = None
@@ -17,6 +18,7 @@ class VerificationCreate(BaseModel):
 class VerificationUpdate(BaseModel):
     documentType: str | None = Field(default=None, max_length=64)
     status: str | None = Field(default=None, max_length=32)
+    note: str | None = Field(default=None, max_length=2000)
     severity: str | None = Field(default=None, max_length=16)
     expires: str | None = None
 
@@ -32,6 +34,7 @@ class VerificationResponse(BaseModel):
     uploaded: datetime
     expires: datetime | None = None
     status: str
+    note: str | None = None
     severity: str | None = None
     reportedBy: str | None = None
     phone: str | None = None

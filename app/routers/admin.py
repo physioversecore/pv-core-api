@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import UserStatus
 
@@ -10,6 +10,10 @@ from app import (
     get_db,
     get_or_404,
     pagination_params,
+)
+from app.services.email.notifications import (
+    send_account_verified_email,
+    send_application_rejected_email,
 )
 from app.models.admin import (
     AdminBookingData,
@@ -720,6 +724,7 @@ async def create_verification_endpoint(
 async def update_verification_endpoint(
     verification_id: str,
     data: VerificationUpdate,
+    background_tasks: BackgroundTasks,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
@@ -730,6 +735,24 @@ async def update_verification_endpoint(
     if "expires" in payload and payload["expires"] == "":
         payload["expires"] = None
     result = await update_verification(db, verification_id, payload)
+
+    # Notify the therapist in the background once their account status
+    # actually changes — email delivery must not block the admin response.
+    user = existing.therapist.user if existing.therapist else None
+    if user:
+        new_status = payload.get("status")
+        if new_status == "Verified" and user.status != "APPROVED":
+            background_tasks.add_task(
+                send_account_verified_email, user.email, user.name
+            )
+        elif new_status == "Rejected":
+            background_tasks.add_task(
+                send_application_rejected_email,
+                user.email,
+                user.name,
+                payload.get("note") or "",
+            )
+
     return VerificationResponse(**result)
 
 

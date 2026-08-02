@@ -14,6 +14,7 @@ def _build_verification_response(v):
         "uploaded": v.uploaded,
         "expires": v.expires,
         "status": v.status,
+        "note": getattr(v, "note", None),
         "severity": v.severity,
         "reportedBy": v.reportedBy,
         "phone": v.phone if v.phone else (v.therapist.user.phone if v.therapist and v.therapist.user else None),

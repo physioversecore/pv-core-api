@@ -15,6 +15,8 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python 3.13**
 - Patient progress reports with file uploads
 - Reviews and ratings
 - Admin dashboard (manage users, therapists, sessions, payments, refunds, complaints, service areas, performance, safety incidents, notifications, analytics, team, activity log, leaves)
+- Admin document verification with persisted rejection reasons and account verified/rejected emails
+- Non-blocking transactional email (OTP, application received, account verified, application rejected) via FastAPI `BackgroundTasks`
 - Distributed rate limiting (Redis-backed Sliding Window Counter with atomic Lua scripts)
 - Auto-generated Swagger docs & ReDoc
 
@@ -142,8 +144,8 @@ app/
   models/                # Pydantic request/response schemas (18 files)
   routers/               # API route handlers (15 files)
   services/              # Business logic layer (19 files)
-  services/email/        # Email provider system (abstract base + SMTP + log fallback)
-  templates/             # Jinja2 email templates (OTP verification)
+  services/email/        # Email system: provider base + SMTP + log fallback + fire-and-forget dispatch + notifications
+  templates/             # Jinja2 email templates (OTP, application received, account verified, application rejected)
   rate_limit/            # Distributed rate limiting system (12 files)
     config.py            # Rate limiting rules & configuration
     storage.py           # Redis + Memory storage backends
@@ -373,7 +375,9 @@ All dependencies are tracked in `pyproject.toml` and `uv.lock`.
 
 20+ models in `prisma/schema.prisma` with 17 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`, `EmailVerification`.
 
-`Therapist.licenseNumber` and `Verification.documentUrl`/`fileName`/`fileSize` were added (migration `20260801000000_add_verification_documents`) so self-signup therapists' uploaded documents feed the admin verification review.
+`Therapist.licenseNumber` and `Verification.documentUrl`/`fileName`/`fileSize` were added (migration `20260801000000_add_verification_documents`) so self-signup therapists' uploaded documents feed the admin verification review. `Verification.note` (admin rejection reason, max 2000 chars) was added later and pushed to the dev DB via `prisma db push`.
+
+All email sends are fire-and-forget via `app/services/email/dispatch.py` scheduled on FastAPI `BackgroundTasks`: OTP codes, the therapist "application received" email on signup, and the account verified/rejected emails on admin verification. Admin approval (`Verified`) emails the therapist; rejection (`Rejected`) persists the `note` reason, includes it in the email, and returns it to the frontend.
 
 After modifying `prisma/schema.prisma`:
 
