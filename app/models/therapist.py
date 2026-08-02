@@ -45,6 +45,7 @@ class TherapistProfileResponse(BaseModel):
     experience: int
     bio: str
     mediaUrls: str | None = None
+    photo: str | None = None
     documents: list[TherapistDocument] | None = None
 
     class Config:
