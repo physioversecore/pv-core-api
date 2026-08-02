@@ -236,6 +236,82 @@ class TestDeleteTherapistAdmin:
         assert response.status_code == 403
 
 
+class TestApproveRejectTherapist:
+    def test_approve_therapist(self, admin_client, mock_db):
+        mock_db.therapist.find_unique.return_value = MOCK_THERAPIST_USER_WITH_PROFILE.therapist
+        mock_db.user.find_unique.return_value = MOCK_THERAPIST_USER_WITH_PROFILE
+        mock_db.user.update.return_value = MOCK_THERAPIST_USER_WITH_PROFILE
+        mock_db.verification.update_many.return_value = None
+        mock_db.verification.find_many.return_value = []
+        mock_db.session.count.return_value = 0
+
+        response = admin_client.put("/api/v1/admin/therapists/therapist-1/approve")
+
+        assert response.status_code == 200
+        assert response.json()["id"] == "therapist-1"
+        mock_db.user.update.assert_awaited_once_with(
+            where={"id": "therapist-user-1"}, data={"status": "APPROVED"}
+        )
+        mock_db.verification.update_many.assert_awaited_once_with(
+            where={"therapistId": "therapist-1", "status": "Pending review"},
+            data={"status": "Verified"},
+        )
+
+    def test_approve_by_user_id(self, admin_client, mock_db):
+        # The admin list is keyed by user id for profile-less pending therapists.
+        mock_db.therapist.find_unique.return_value = None
+        mock_db.user.find_unique.return_value = MOCK_THERAPIST_USER
+        mock_db.user.update.return_value = MOCK_THERAPIST_USER
+        mock_db.verification.find_many.return_value = []
+        mock_db.session.count.return_value = 0
+
+        response = admin_client.put(
+            "/api/v1/admin/therapists/therapist-user-1/approve"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == "therapist-user-1"
+        mock_db.user.update.assert_awaited_once_with(
+            where={"id": "therapist-user-1"}, data={"status": "APPROVED"}
+        )
+
+    def test_reject_therapist_with_note(self, admin_client, mock_db):
+        mock_db.therapist.find_unique.return_value = MOCK_THERAPIST_USER_WITH_PROFILE.therapist
+        mock_db.user.find_unique.return_value = MOCK_THERAPIST_USER_WITH_PROFILE
+        mock_db.user.update.return_value = MOCK_THERAPIST_USER_WITH_PROFILE
+        mock_db.verification.update_many.return_value = None
+        mock_db.verification.find_many.return_value = []
+        mock_db.session.count.return_value = 0
+
+        response = admin_client.put(
+            "/api/v1/admin/therapists/therapist-1/reject",
+            json={"note": "License could not be verified"},
+        )
+
+        assert response.status_code == 200
+        mock_db.user.update.assert_awaited_once_with(
+            where={"id": "therapist-user-1"}, data={"status": "REJECTED"}
+        )
+        mock_db.verification.update_many.assert_awaited_once_with(
+            where={"therapistId": "therapist-1", "status": "Pending review"},
+            data={"status": "Rejected", "note": "License could not be verified"},
+        )
+
+    def test_reject_not_found(self, admin_client, mock_db):
+        mock_db.therapist.find_unique.return_value = None
+        mock_db.user.find_unique.return_value = None
+
+        response = admin_client.put(
+            "/api/v1/admin/therapists/unknown/reject", json={"note": ""}
+        )
+
+        assert response.status_code == 404
+
+    def test_approve_forbidden_for_non_admin(self, patient_client):
+        response = patient_client.put("/api/v1/admin/therapists/therapist-1/approve")
+        assert response.status_code == 403
+
+
 MOCK_PATIENT_WITH_SESSIONS = SimpleNamespace(
     id="patient-1",
     name="Test Patient",

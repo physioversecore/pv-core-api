@@ -28,6 +28,7 @@ from app.models.admin import (
     AdminPerformanceListResponse,
     AdminPerformanceUpdate,
     AdminRecentActivity,
+    AdminRejectRequest,
     AdminTherapistCreatedResponse,
     AdminTherapistData,
     AdminTherapistListResponse,
@@ -50,6 +51,7 @@ from app.models.service_area import (
     TherapistAssignRequest,
 )
 from app.services.admin import (
+    approve_admin_therapist,
     create_therapist_by_admin,
     delete_admin_performance,
     delete_admin_patient,
@@ -64,7 +66,9 @@ from app.services.admin import (
     get_admin_recent_activity,
     get_admin_therapist,
     get_admin_therapists,
+    reject_admin_therapist,
     remove_from_team,
+    resolve_therapist_user,
     resolve_therapist,
     schedule_review,
     update_admin_performance,
@@ -234,6 +238,46 @@ async def update_therapist_admin(
     )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return result
+
+
+@router.put("/therapists/{therapist_id}/approve", response_model=AdminTherapistData)
+async def approve_therapist_admin(
+    therapist_id: str,
+    background_tasks: BackgroundTasks,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    result = await approve_admin_therapist(db, therapist_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    _, user = await resolve_therapist_user(db, therapist_id)
+    if user and user.status == "APPROVED":
+        background_tasks.add_task(
+            send_account_verified_email, user.email, user.name
+        )
+    return result
+
+
+@router.put("/therapists/{therapist_id}/reject", response_model=AdminTherapistData)
+async def reject_therapist_admin(
+    therapist_id: str,
+    data: AdminRejectRequest,
+    background_tasks: BackgroundTasks,
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    result = await reject_admin_therapist(db, therapist_id, data.note)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    _, user = await resolve_therapist_user(db, therapist_id)
+    if user and user.status == "REJECTED":
+        background_tasks.add_task(
+            send_application_rejected_email,
+            user.email,
+            user.name,
+            data.note or "",
+        )
     return result
 
 

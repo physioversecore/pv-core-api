@@ -117,41 +117,63 @@ async def get_admin_therapists(
     return items, total
 
 
-async def get_admin_therapist(db: Prisma, therapist_id: str):
-    t = await db.therapist.find_unique(
-        where={"id": therapist_id},
-        include={"verifications": True},
-    )
+async def resolve_therapist_user(db: Prisma, key: str):
+    """Resolve the therapist + user rows from either a therapist id or a user id.
+
+    The admin therapist list is keyed by user id for therapists that have not yet
+    been assigned a profile, so detail/toggle/delete lookups must accept both.
+    """
+    t = await db.therapist.find_unique(where={"id": key})
     if not t:
-        return None
-    u = await db.user.find_unique(where={"id": t.userId})
+        t = await db.therapist.find_unique(where={"userId": key})
+    if t:
+        u = await db.user.find_unique(where={"id": t.userId})
+        return t, u
+    u = await db.user.find_unique(where={"id": key})
+    if u and u.role == "THERAPIST":
+        return None, u
+    return None, None
+
+
+async def get_admin_therapist(db: Prisma, key: str):
+    t, u = await resolve_therapist_user(db, key)
     if not u:
         return None
-    sessions = await db.session.count(where={"therapistId": t.id})
+
+    if t:
+        verifications = await db.verification.find_many(
+            where={"therapistId": t.id},
+            order={"createdAt": "desc"},
+        )
+        sessions = await db.session.count(where={"therapistId": t.id})
+    else:
+        verifications = []
+        sessions = 0
+
     return {
-        "id": t.id,
+        "id": t.id if t else u.id,
         "name": u.name,
-        "city": t.city,
-        "specialty": t.specialty,
-        "rating": t.rating,
+        "city": t.city if t else (u.city or ""),
+        "specialty": t.specialty if t else (u.specialty or ""),
+        "rating": t.rating if t else 0.0,
         "sessions": sessions,
         "status": STATUS_MAP.get(u.status, u.status),
         "joined": u.createdAt.strftime("%Y-%m-%d") if u.createdAt else "",
         "isActive": u.status == "APPROVED",
         "phone": u.phone,
         "email": u.email,
-        "gender": t.gender,
-        "price": t.price,
-        "experience": t.experience,
-        "bio": t.bio,
-        "mediaUrls": t.mediaUrls,
-        "documents": [_document_payload(v) for v in t.verifications],
+        "gender": t.gender if t else None,
+        "price": t.price if t else None,
+        "experience": t.experience if t else None,
+        "bio": t.bio if t else None,
+        "mediaUrls": t.mediaUrls if t else None,
+        "documents": [_document_payload(v) for v in verifications],
     }
 
 
-async def update_admin_therapist(db: Prisma, therapist_id: str, data: dict):
-    t = await db.therapist.find_unique(where={"id": therapist_id})
-    if not t:
+async def update_admin_therapist(db: Prisma, key: str, data: dict):
+    t, u = await resolve_therapist_user(db, key)
+    if not u:
         return None
 
     therapist_fields = {}
@@ -172,20 +194,56 @@ async def update_admin_therapist(db: Prisma, therapist_id: str, data: dict):
     if "isActive" in data:
         user_fields["status"] = "APPROVED" if data["isActive"] else "REJECTED"
 
-    if therapist_fields:
-        await db.therapist.update(where={"id": therapist_id}, data=therapist_fields)
+    if therapist_fields and t:
+        await db.therapist.update(where={"id": t.id}, data=therapist_fields)
     if user_fields:
-        await db.user.update(where={"id": t.userId}, data=user_fields)
+        await db.user.update(where={"id": u.id}, data=user_fields)
 
-    return await get_admin_therapist(db, therapist_id)
+    return await get_admin_therapist(db, u.id)
 
 
-async def delete_admin_therapist(db: Prisma, therapist_id: str):
-    t = await db.therapist.find_unique(where={"id": therapist_id})
-    if not t:
+async def approve_admin_therapist(db: Prisma, key: str) -> dict | None:
+    """Approve a therapist: flip the user to APPROVED and mark any pending
+    verification documents as Verified so the account unlock is consistent
+    with the /admin/verification flow."""
+    t, u = await resolve_therapist_user(db, key)
+    if not u:
+        return None
+    await db.user.update(where={"id": u.id}, data={"status": "APPROVED"})
+    if t:
+        await db.verification.update_many(
+            where={"therapistId": t.id, "status": "Pending review"},
+            data={"status": "Verified"},
+        )
+    return await get_admin_therapist(db, u.id)
+
+
+async def reject_admin_therapist(db: Prisma, key: str, note: str = "") -> dict | None:
+    """Reject a therapist: flip the user to REJECTED, mark pending verification
+    documents as Rejected with the admin's note (shown to the therapist and in
+    the admin detail view), and let the router fire the rejection email."""
+    t, u = await resolve_therapist_user(db, key)
+    if not u:
+        return None
+    await db.user.update(where={"id": u.id}, data={"status": "REJECTED"})
+    if t:
+        update_data: dict = {"status": "Rejected"}
+        if note:
+            update_data["note"] = note
+        await db.verification.update_many(
+            where={"therapistId": t.id, "status": "Pending review"},
+            data=update_data,
+        )
+    return await get_admin_therapist(db, u.id)
+
+
+async def delete_admin_therapist(db: Prisma, key: str):
+    t, u = await resolve_therapist_user(db, key)
+    if not u:
         return False
-    await db.therapist.delete(where={"id": therapist_id})
-    await db.user.delete(where={"id": t.userId})
+    if t:
+        await db.therapist.delete(where={"id": t.id})
+    await db.user.delete(where={"id": u.id})
     return True
 
 

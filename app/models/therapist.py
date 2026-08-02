@@ -22,6 +22,16 @@ class TherapistUpdate(BaseModel):
     bio: str | None = None
 
 
+class TherapistDocument(BaseModel):
+    id: str
+    documentType: str | None = None
+    documentUrl: str | None = None
+    fileName: str | None = None
+    fileSize: int | None = None
+    status: str | None = None
+    note: str | None = None
+
+
 class TherapistProfileResponse(BaseModel):
     id: str
     userId: str
@@ -35,6 +45,7 @@ class TherapistProfileResponse(BaseModel):
     experience: int
     bio: str
     mediaUrls: str | None = None
+    documents: list[TherapistDocument] | None = None
 
     class Config:
         from_attributes = True

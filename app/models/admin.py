@@ -37,6 +37,7 @@ class AdminTherapistDocument(BaseModel):
     fileName: str | None = None
     fileSize: int | None = None
     status: str | None = None
+    note: str | None = None
 
 
 class AdminTherapistData(BaseModel):
@@ -75,6 +76,10 @@ class AdminTherapistUpdate(BaseModel):
     email: str | None = None
     status: str | None = None
     isActive: bool | None = None
+
+
+class AdminRejectRequest(BaseModel):
+    note: str = ""
 
 
 class AdminPatientData(BaseModel):

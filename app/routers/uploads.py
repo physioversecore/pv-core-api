@@ -18,8 +18,10 @@ THERAPISTS_ROOT = UPLOAD_ROOT / "Therapists"
 APPLICATIONS_ROOT = UPLOAD_ROOT / "TherapistApplications"
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
-ALLOWED_REPORT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx"}
-ALLOWED_THERAPIST_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx"}
+# Images and PDFs only — no doc/docx uploads.
+ALLOWED_REPORT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
+ALLOWED_THERAPIST_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
+ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 def _sanitize_id(value: str) -> str:
@@ -34,6 +36,41 @@ def _validate_filename(filename: str) -> str:
     if ext not in ALLOWED_REPORT_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed")
     return ext
+
+
+def _validate_photo_extension(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_PHOTO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only image files are allowed for profile photo")
+    return ext
+
+
+async def _resolve_therapist(db: Prisma, key: str):
+    """Resolve a therapist by Therapist id or User id.
+
+    If the therapist has no Therapist profile row yet (e.g. a pending
+    application created via signup), one is created lazily so document/photo
+    uploads work for therapists in every status."""
+    therapist = await db.therapist.find_unique(where={"id": key})
+    if not therapist:
+        therapist = await db.therapist.find_unique(where={"userId": key})
+    if not therapist:
+        user = await db.user.find_unique(where={"id": key})
+        if not user:
+            return None
+        therapist = await db.therapist.create(
+            data={
+                "userId": user.id,
+                "name": user.name or "Therapist",
+                "specialty": user.specialty or "General",
+                "city": user.city or "Kathmandu",
+                "gender": "Male",
+                "price": 1000.0,
+                "experience": 1,
+                "bio": "",
+            }
+        )
+    return therapist
 
 
 def _validate_upload_size(content: bytes) -> None:
@@ -168,17 +205,14 @@ async def upload_therapist_file(
 ):
     therapist_id = _sanitize_id(therapist_id)
 
-    therapist = await db.therapist.find_unique(where={"id": therapist_id})
+    therapist = await _resolve_therapist(db, therapist_id)
     if not therapist:
         raise HTTPException(status_code=404, detail="Therapist not found")
-
-    if current_user.role == Role.THERAPIST and therapist.userId != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if current_user.role not in (Role.THERAPIST, Role.ADMIN):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    therapist_dir = THERAPISTS_ROOT / therapist_id
+    therapist_dir = THERAPISTS_ROOT / therapist.id
     therapist_dir.mkdir(parents=True, exist_ok=True)
 
     urls: list[str] = []
@@ -196,13 +230,136 @@ async def upload_therapist_file(
 
         original = f.filename or f"file{ext}"
         size = len(content)
-        urls.append(f"/api/v1/uploads/therapists/{therapist_id}/{filename}?name={original}&size={size}")
+        urls.append(f"/api/v1/uploads/therapists/{therapist.id}/{filename}?name={original}&size={size}")
 
     existing = [u.strip() for u in (therapist.mediaUrls or "").split(",") if u.strip()]
     all_urls = existing + urls
     await db.therapist.update(
-        where={"id": therapist_id},
+        where={"id": therapist.id},
         data={"mediaUrls": ",".join(all_urls)},
     )
 
     return {"urls": urls, "total": len(all_urls)}
+
+
+def _document_payload(v) -> dict:
+    return {
+        "id": v.id,
+        "documentType": v.documentType,
+        "documentUrl": v.documentUrl,
+        "fileName": v.fileName,
+        "fileSize": v.fileSize,
+        "status": v.status,
+        "note": getattr(v, "note", None),
+    }
+
+
+@router.post("/therapists/{therapist_id}/documents")
+async def upload_therapist_documents(
+    therapist_id: str,
+    files: list[UploadFile] = File(...),
+    documentType: str = Form("Additional document"),
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Upload verification documents for a therapist (own profile or admin).
+
+    Files are stored in the same Therapist folder used by the application
+    uploads and appended to the therapist's Verification records, so they show
+    up alongside the original signup documents in admin review and on the
+    therapist profile page."""
+    therapist_id = _sanitize_id(therapist_id)
+
+    therapist = await _resolve_therapist(db, therapist_id)
+    if not therapist:
+        raise HTTPException(status_code=404, detail="Therapist not found")
+
+    if current_user.role not in (Role.THERAPIST, Role.ADMIN):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if current_user.role == Role.THERAPIST and therapist.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    therapist_dir = THERAPISTS_ROOT / therapist.id
+    therapist_dir.mkdir(parents=True, exist_ok=True)
+
+    created: list[dict] = []
+    for f in files:
+        original = f.filename or "file"
+        ext = _validate_filename(original)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        dest = therapist_dir / filename
+
+        content = await f.read()
+        _validate_upload_size(content)
+
+        with open(dest, "wb") as out:
+            out.write(content)
+
+        url = f"/api/v1/uploads/therapists/{therapist.id}/{filename}?name={original}&size={len(content)}"
+
+        record = await db.verification.create(
+            data={
+                "therapistId": therapist.id,
+                "documentType": documentType[:64],
+                "documentUrl": url,
+                "fileName": original,
+                "fileSize": len(content),
+                "status": "Pending review",
+                "reportedBy": "Admin" if current_user.role == Role.ADMIN else "Therapist",
+                "phone": current_user.phone,
+            }
+        )
+        created.append(_document_payload(record))
+
+    return {"documents": created}
+
+
+@router.post("/therapists/{therapist_id}/photo")
+async def upload_therapist_photo(
+    therapist_id: str,
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Upload a profile photo for a therapist (own profile or admin).
+
+    The photo becomes the first entry in the therapist's mediaUrls, so it is
+    served as the avatar everywhere the profile is shown. Works for therapists
+    in every status (a missing Therapist profile row is created lazily)."""
+    therapist_id = _sanitize_id(therapist_id)
+
+    therapist = await _resolve_therapist(db, therapist_id)
+    if not therapist:
+        raise HTTPException(status_code=404, detail="Therapist not found")
+
+    if current_user.role not in (Role.THERAPIST, Role.ADMIN):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if current_user.role == Role.THERAPIST and therapist.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    original = file.filename or "photo"
+    ext = _validate_photo_extension(original)
+
+    content = await file.read()
+    _validate_upload_size(content)
+
+    therapist_dir = THERAPISTS_ROOT / therapist.id
+    therapist_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"photo-{uuid.uuid4().hex}{ext}"
+    dest = therapist_dir / filename
+    with open(dest, "wb") as out:
+        out.write(content)
+
+    url = f"/api/v1/uploads/therapists/{therapist.id}/{filename}?name={original}&size={len(content)}"
+
+    existing = [u.strip() for u in (therapist.mediaUrls or "").split(",") if u.strip()]
+    all_urls = [url] + [u for u in existing if u != url]
+    await db.therapist.update(
+        where={"id": therapist.id},
+        data={"mediaUrls": ",".join(all_urls)},
+    )
+
+    return {"url": url}

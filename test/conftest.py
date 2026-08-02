@@ -216,6 +216,7 @@ METHODS = [
     "find_first",
     "create",
     "update",
+    "update_many",
     "delete",
     "delete_many",
     "count",

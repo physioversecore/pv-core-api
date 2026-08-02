@@ -44,6 +44,7 @@ class UserResponse(BaseModel):
     phone: str | None = None
     specialty: str | None = None
     status: str
+    photo: str | None = None
 
     class Config:
         from_attributes = True

@@ -57,6 +57,24 @@ async def get_therapist_profile(db: Prisma, user_id: str):
     therapist = await db.therapist.find_unique(where={"userId": user_id})
     if not therapist:
         return None
+
+    verifications = await db.verification.find_many(
+        where={"therapistId": therapist.id},
+        order={"createdAt": "desc"},
+    )
+    documents = [
+        {
+            "id": v.id,
+            "documentType": v.documentType,
+            "documentUrl": v.documentUrl,
+            "fileName": v.fileName,
+            "fileSize": v.fileSize,
+            "status": v.status,
+            "note": v.note,
+        }
+        for v in verifications
+    ]
+
     return {
         "id": therapist.id,
         "userId": user.id,
@@ -70,6 +88,8 @@ async def get_therapist_profile(db: Prisma, user_id: str):
         "experience": therapist.experience or 0,
         "bio": therapist.bio or "",
         "mediaUrls": therapist.mediaUrls,
+        "photo": (therapist.mediaUrls or "").split(",")[0].strip() or None,
+        "documents": documents,
     }
 
 

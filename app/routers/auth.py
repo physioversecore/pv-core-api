@@ -31,6 +31,18 @@ from app.services.otp import create_otp, send_otp_email, verify_otp
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
+async def _user_with_photo(db: Prisma, user) -> UserResponse:
+    """Serialize a user, attaching their profile photo (first mediaUrls entry)
+    so avatars load from the auth session across the app."""
+    data = UserResponse.model_validate(user).model_dump()
+    if user.role == "THERAPIST":
+        therapist = await db.therapist.find_unique(where={"userId": user.id})
+        media_urls = getattr(therapist, "mediaUrls", None)
+        if therapist and isinstance(media_urls, str) and media_urls.strip():
+            data["photo"] = media_urls.split(",")[0].strip()
+    return UserResponse(**data)
+
+
 @router.post("/send-otp")
 async def send_verification_otp(
     data: SendOtpRequest,
@@ -128,14 +140,14 @@ async def signup(
         background_tasks.add_task(send_application_received_email, user.email, user.name)
         return TokenResponse(
             access_token=None,
-            user=UserResponse.model_validate(user),
+            user=await _user_with_photo(db, user),
         )
 
     token = create_access_token(user.id)
 
     return TokenResponse(
         access_token=token,
-        user=UserResponse.model_validate(user),
+        user=await _user_with_photo(db, user),
     )
 
 
@@ -160,13 +172,16 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
     token = create_access_token(user.id)
     return TokenResponse(
         access_token=token,
-        user=UserResponse.model_validate(user),
+        user=await _user_with_photo(db, user),
     )
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(current_user=Depends(get_current_user)):
-    return UserResponse.model_validate(current_user)
+async def me(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    return await _user_with_photo(db, current_user)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -176,7 +191,7 @@ async def update_my_profile(
     db: Prisma = Depends(get_db),
 ):
     user = await update_user(db, current_user.id, data.model_dump(exclude_none=True))
-    return UserResponse.model_validate(user)
+    return await _user_with_photo(db, user)
 
 
 @router.post("/forgot-password")
