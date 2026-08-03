@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: pvc-api
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pvc-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: pvc-redis
+          type: keyvalue
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: RATE_LIMIT_ENABLED
+        value: "true"
+      - key: RATE_LIMIT_STORAGE_BACKEND
+        value: "redis"
+      - key: RATE_LIMIT_DEFAULT_LIMIT
+        value: "100"
+      - key: RATE_LIMIT_DEFAULT_WINDOW
+        value: "60"
+      - key: UVICORN_RELOAD
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+
+  - type: keyvalue
+    name: pvc-redis
+    plan: free
+    region: oregon
+    ipAllowList: []
+    persistenceMode: off
+    maxmemoryPolicy: volatile-lru
+
+databases:
+  - name: pvc-postgres
+    plan: free
+    region: oregon
+    databaseName: physioversecore

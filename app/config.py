@@ -1,5 +1,6 @@
 import json
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -8,7 +9,10 @@ class Settings(BaseSettings):
     secret_key: str = "super-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
-    backend_port: int = 8000
+    backend_port: int = Field(
+        default=8000,
+        validation_alias=AliasChoices("PORT", "BACKEND_PORT"),
+    )
     uvicorn_reload: bool = True
 
     redis_url: str = "redis://localhost:6379/0"
