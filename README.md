@@ -14,6 +14,7 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python 3.13**
 - Payment tracking and booking+payment combo flow
 - Patient progress reports with file uploads
 - Reviews and ratings
+- Complaints with up to 3 evidence attachments per filing (session-based upload + authenticated serving) and an admin "new complaints" badge endpoint (`GET /admin/complaints/new-count?since=`)
 - Admin dashboard (manage users, therapists, sessions, payments, refunds, complaints, service areas, performance, safety incidents, notifications, analytics, team, activity log, leaves)
 - Admin document verification with persisted rejection reasons and account verified/rejected emails
 - Non-blocking transactional email (OTP, application received, account verified, application rejected) via FastAPI `BackgroundTasks`
@@ -284,7 +285,7 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 | GET | `/api/v1/therapist/earnings/payouts` | Payout history | Therapist |
 
 ### Admin (60+ endpoints)
-Includes: users CRUD, therapist management, patient management, dashboard stats, bookings, complaints (CRUD, assign), service areas, performance, verifications, refunds, activity log, payments, payouts, notifications, team, leaves, incidents, analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
+Includes: users CRUD, therapist management, patient management, dashboard stats, bookings (incl. `GET /bookings/new-count?since=` for the sidebar badge), complaints (CRUD, assign, `GET /complaints/new-count?since=`), service areas, performance, verifications, refunds, activity log, payments, payouts, notifications, team, leaves, incidents, analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
 
 ### Settings
 | Method | Endpoint | Description | Access |
@@ -301,6 +302,8 @@ Includes: users CRUD, therapist management, patient management, dashboard stats,
 |---|---|---|---|
 | POST | `/api/v1/uploads/therapist-application` | Upload verification docs before signup (returns relative URLs to embed in signup payload) | Public |
 | GET | `/api/v1/uploads/applications/{session}/{filename}` | Serve a signup document | Authenticated |
+| POST | `/api/v1/uploads/complaint-evidence` | Upload complaint evidence files before filing (session key; returns real URLs to embed in the complaint payload) | Public |
+| GET | `/api/v1/uploads/evidence/{session}/{filename}` | Serve complaint evidence | Authenticated |
 | GET | `/api/v1/uploads/{patient_id}/{filename}` | Download report file | Token-authenticated |
 | GET | `/api/v1/uploads/therapists/{id}/{filename}` | Download therapist media | Authenticated |
 | POST | `/api/v1/uploads/therapists/{id}` | Upload therapist media | Therapist/Admin |
@@ -375,7 +378,7 @@ All dependencies are tracked in `pyproject.toml` and `uv.lock`.
 
 20+ models in `prisma/schema.prisma` with 17 migrations. Key models: `User`, `Therapist`, `PatientProfile`, `Verification`, `Product`, `Session`, `Review`, `Report`, `Payment`, `CartItem`, `Setting`, `AvailabilitySlot`, `RecurringPattern`, `AvailabilityBlock`, `AuditLogEntry`, `ScheduleBlockRequest`, `Complaint`, `Refund`, `ServiceArea`, `ActivityLog`, `EmailVerification`.
 
-`Therapist.licenseNumber` and `Verification.documentUrl`/`fileName`/`fileSize` were added (migration `20260801000000_add_verification_documents`) so self-signup therapists' uploaded documents feed the admin verification review. `Verification.note` (admin rejection reason, max 2000 chars) was added later and pushed to the dev DB via `prisma db push`.
+`Therapist.licenseNumber` and `Verification.documentUrl`/`fileName`/`fileSize` were added (migration `20260801000000_add_verification_documents`) so self-signup therapists' uploaded documents feed the admin verification review. `Verification.note` (admin rejection reason, max 2000 chars) was added later and pushed to the dev DB via `prisma db push`. `Complaint.evidenceUrls` (comma-separated `/api/v1/uploads/evidence/{session}/{filename}` URLs) stores complaint evidence attachments.
 
 All email sends are fire-and-forget via `app/services/email/dispatch.py` scheduled on FastAPI `BackgroundTasks`: OTP codes, the therapist "application received" email on signup, and the account verified/rejected emails on admin verification. Admin approval (`Verified`) emails the therapist; rejection (`Rejected`) persists the `note` reason, includes it in the email, and returns it to the frontend.
 

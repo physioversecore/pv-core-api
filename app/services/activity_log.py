@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from prisma import Prisma
+from prisma import Json, Prisma
 
 
 async def log_admin_activity(
@@ -16,7 +16,7 @@ async def log_admin_activity(
             "action": action,
             "targetType": target_type,
             "targetId": target_id,
-            "metadata": metadata or {},
+            "metadata": Json(metadata) if metadata else Json({}),
             "createdAt": datetime.now(timezone.utc),
         }
     )

@@ -217,7 +217,7 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 | PUT  | `/availability/block-requests/{id}/reject` | Admin |
 
 ### Admin (60+ endpoints across admin + admin_extras)
-Includes: users CRUD, therapist management (list, create, approve, reject, suspend), patient management, dashboard stats/earnings/recent activity, bookings, complaints (CRUD, assign), service areas (CRUD, assign therapists), performance (list, detail, update, resolve, schedule review, remove), verifications (CRUD, suspend), refunds (CRUD, stats, manual cases, assign), activity log, payments management, payouts, notifications, team management, leaves, incidents (escalate/resolve), analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
+Includes: users CRUD, therapist management (list, create, approve, reject, suspend), patient management, dashboard stats/earnings/recent activity, bookings (incl. `GET /bookings/new-count?since=` badge), complaints (CRUD, assign, `GET /complaints/new-count?since=` badge), service areas (CRUD, assign therapists), performance (list, detail, update, resolve, schedule review, remove), verifications (CRUD, suspend), refunds (CRUD, stats, manual cases, assign), activity log, payments management, payouts, notifications, team management, leaves, incidents (escalate/resolve), analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
 
 ### Settings
 | Method | Path | Access |
@@ -234,6 +234,8 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 |---|---|---|
 | POST | `/uploads/therapist-application` | Public (pre-signup verification documents, `files` + `session` Form fields) |
 | GET  | `/uploads/applications/{session}/{filename}` | Authenticated |
+| POST | `/uploads/complaint-evidence` | Public (pre-filing complaint evidence, `files` + `session` Form fields) |
+| GET  | `/uploads/evidence/{session}/{filename}` | Authenticated |
 | GET  | `/uploads/{patient_id}/{filename}?token=...` | Token-authenticated |
 | GET  | `/uploads/therapists/{id}/{filename}` | Authenticated |
 | POST | `/uploads/therapists/{id}` | Therapist/Admin |
@@ -267,7 +269,7 @@ Includes: users CRUD, therapist management (list, create, approve, reject, suspe
 | `AvailabilityBlock` | Therapist block-time-off records |
 | `AuditLogEntry` | Availability change audit trail |
 | `ScheduleBlockRequest` | Therapist requests for admin-approved time blocks |
-| `Complaint` | Complaint/dispute records |
+| `Complaint` | Complaint/dispute records (`evidenceUrls` comma-separated attachment URLs, `preferredOutcome`, `adminNotes`, `source`) |
 | `Refund` | Refund requests and tracking |
 | `ServiceArea` | Geographic service areas |
 | `TherapistServiceArea` | M2M linking therapists to service areas |
@@ -384,6 +386,8 @@ For Gmail: generate an [App Password](https://myaccount.google.com/apppasswords)
 12. **Pre-signup document uploads** — Therapists upload NMC license + certification *before* an account exists via the public `POST /uploads/therapist-application` (client-generated `session` key). Returned relative URLs are embedded in the signup payload; `create_therapist_signup()` (in `app/services/auth.py`) creates the `Therapist` profile (licenseNumber/fee/experience/bio) plus one `Verification` row per document (status `Pending review`, reportedBy `Self-signup`) so admin verification has real files + credentials to review. Documents are served to authenticated users via `GET /uploads/applications/{session}/{filename}` (path-traversal guarded).
 13. **Fire-and-forget email dispatch** — All transactional emails (OTP, application received, account verified, application rejected) are sent through `dispatch_email()` scheduled on FastAPI `BackgroundTasks`. Sending never blocks or fails the request and errors are only logged, keeping emails secondary to the main API flow.
 14. **Persisted rejection reasons** — `Verification.note` stores the admin's rejection reason on `PUT /admin/verifications/{id}`. It is returned to the frontend (shown in the therapist detail sheet) and included in the rejection email.
+15. **Session-keyed pre-entity uploads** — Complaint evidence uses the same pattern as therapist signup documents: files upload to the public `POST /uploads/complaint-evidence` under a client-generated `session` key *before* the complaint exists; returned URLs `/uploads/evidence/{session}/{filename}` are embedded in the complaint payload as `Complaint.evidenceUrls` (comma-separated) and served to authenticated users via `GET /uploads/evidence/{session}/{filename}` (path-traversal guarded).
+16. **Badge count endpoints** — `GET /admin/bookings/new-count?since=` and `GET /admin/complaints/new-count?since=` (admin only) return `{"count": N}` for records with `createdAt > since` (ISO-8601, "Z" normalized). The frontend polls these every 30s to power sidebar notification badges.
 
 ---
 

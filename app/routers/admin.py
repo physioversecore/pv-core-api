@@ -76,6 +76,7 @@ from app.services.admin import (
     update_admin_therapist,
 )
 from app.services.complaint import (
+    assign_complaint,
     create_complaint,
     delete_complaint,
     get_complaint,
