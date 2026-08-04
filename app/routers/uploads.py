@@ -16,6 +16,7 @@ UPLOAD_ROOT = Path(__file__).resolve().parent.parent.parent / "Upload"
 REPORTS_ROOT = UPLOAD_ROOT / "Reports"
 THERAPISTS_ROOT = UPLOAD_ROOT / "Therapists"
 APPLICATIONS_ROOT = UPLOAD_ROOT / "TherapistApplications"
+EVIDENCE_ROOT = UPLOAD_ROOT / "ComplaintEvidence"
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 # Images and PDFs only — no doc/docx uploads.
@@ -405,3 +406,64 @@ async def delete_therapist_photo(
     )
 
     return {"success": True, "removed": len(removed)}
+
+
+# ---------------------------------------------------------------------------
+# Complaint evidence uploads — session-based, same pattern as therapist-application
+# ---------------------------------------------------------------------------
+
+@router.post("/complaint-evidence")
+async def upload_complaint_evidence(
+    files: list[UploadFile] = File(...),
+    session: str = Form(""),
+):
+    """Public endpoint — upload evidence files before complaint creation.
+    Files are stored under a client-generated session key and returned as
+    real URLs to embed in the complaint payload."""
+    session = _validate_application_session(session or "complaint-evidence")
+
+    evidence_dir = EVIDENCE_ROOT / session
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded: list[dict] = []
+    for f in files:
+        ext = _validate_filename(f.filename or "file")
+        filename = f"{uuid.uuid4().hex}{ext}"
+        dest = evidence_dir / filename
+
+        content = await f.read()
+        _validate_upload_size(content)
+
+        with open(dest, "wb") as out:
+            out.write(content)
+
+        uploaded.append(
+            {
+                "url": f"/api/v1/uploads/evidence/{session}/{filename}",
+                "fileName": f.filename or f"file{ext}",
+                "fileSize": len(content),
+            }
+        )
+
+    return {"urls": uploaded}
+
+
+@router.get("/evidence/{session}/{filename}")
+async def serve_evidence_file(
+    session: str,
+    filename: str,
+    current_user=Depends(get_current_user),
+):
+    """Serve complaint evidence files (authenticated)."""
+    session = _validate_application_session(session)
+    file_path = (EVIDENCE_ROOT / session / filename).resolve()
+
+    if not str(file_path).startswith(str(EVIDENCE_ROOT.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    import mimetypes
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return FileResponse(str(file_path), media_type=media_type)

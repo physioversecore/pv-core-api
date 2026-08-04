@@ -432,6 +432,25 @@ async def new_booking_count(
     return {"count": count}
 
 
+@router.get("/complaints/new-count")
+async def new_complaint_count(
+    since: str | None = None,
+    _=Depends(get_admin_user),
+    db: Prisma =Depends(get_db),
+):
+    where: dict = {}
+    if since:
+        from datetime import datetime as dt
+        try:
+            parsed = dt.fromisoformat(since.replace("Z", "+00:00"))
+            where["createdAt"] = {"gt": parsed}
+        except (ValueError, TypeError):
+            pass
+
+    count = await db.complaint.count(where=where)
+    return {"count": count}
+
+
 # ── Complaints ──
 
 
