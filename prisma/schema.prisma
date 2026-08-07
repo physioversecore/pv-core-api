@@ -87,7 +87,11 @@ model PatientProfile {
   city        String
   address     String?
   history     String?
+  dob         DateTime?
   gender      String   @default("Any")
+  emergencyName     String?
+  emergencyRelation String?
+  emergencyPhone    String?
   notifEmail  Boolean  @default(true)
   notifSms    Boolean  @default(false)
   createdAt   DateTime @default(now())

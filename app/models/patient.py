@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, field_validator
 
 
@@ -13,7 +15,13 @@ class PatientProfileResponse(BaseModel):
     city: str
     address: str | None = None
     history: str | None = None
+    dob: str | None = None
+    age: int | None = None
     gender: str = "Any"
+    condition: str | None = None
+    emergencyName: str | None = None
+    emergencyRelation: str | None = None
+    emergencyPhone: str | None = None
     notifEmail: bool = True
     notifSms: bool = False
     createdAt: str
@@ -29,11 +37,15 @@ class PatientProfileUpdate(BaseModel):
     city: str | None = None
     address: str | None = None
     history: str | None = None
+    dob: str | None = None
     gender: str | None = None
+    emergencyName: str | None = None
+    emergencyRelation: str | None = None
+    emergencyPhone: str | None = None
     notifEmail: bool | None = None
     notifSms: bool | None = None
 
-    @field_validator("phone")
+    @field_validator("phone", "emergencyPhone")
     @classmethod
     def validate_phone(cls, v: str | None) -> str | None:
         if v is None:
@@ -41,6 +53,17 @@ class PatientProfileUpdate(BaseModel):
         digits = "".join(c for c in v if c.isdigit())
         if len(digits) < 7 or len(digits) > 15:
             raise ValueError("Phone number must have 7-15 digits")
+        return v
+
+    @field_validator("dob")
+    @classmethod
+    def validate_dob(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            date.fromisoformat(v)
+        except ValueError as exc:
+            raise ValueError("Date of birth must be a valid date (YYYY-MM-DD)") from exc
         return v
 
     @field_validator("gender")

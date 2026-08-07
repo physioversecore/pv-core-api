@@ -40,8 +40,16 @@ async def upsert_patient_profile(db: Prisma, user_id: str, data: dict):
             create_data["address"] = filtered["address"]
         if "history" in filtered:
             create_data["history"] = filtered["history"]
+        if "dob" in filtered:
+            create_data["dob"] = filtered["dob"]
         if "gender" in filtered:
             create_data["gender"] = filtered["gender"]
+        if "emergencyName" in filtered:
+            create_data["emergencyName"] = filtered["emergencyName"]
+        if "emergencyRelation" in filtered:
+            create_data["emergencyRelation"] = filtered["emergencyRelation"]
+        if "emergencyPhone" in filtered:
+            create_data["emergencyPhone"] = filtered["emergencyPhone"]
         if "notifEmail" in filtered:
             create_data["notifEmail"] = filtered["notifEmail"]
         if "notifSms" in filtered:
@@ -64,13 +72,25 @@ async def get_patient_dashboard(db: Prisma, user_id: str):
         where={"patientId": user_id, "status": "SCHEDULED"}
     )
 
-    session = await db.session.find_first(
+    now = datetime.now(timezone.utc)
+
+    sessions = await db.session.find_many(
         where={"patientId": user_id, "status": "SCHEDULED"},
         order={"date": "asc"},
     )
 
     next_session = None
-    if session:
+    for session in sessions:
+        try:
+            hours, minutes = (int(part) for part in session.time.split(":")[:2])
+        except (ValueError, AttributeError):
+            continue
+        session_dt = session.date
+        if session_dt.tzinfo is None:
+            session_dt = session_dt.replace(tzinfo=timezone.utc)
+        session_dt = session_dt.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+        if session_dt <= now:
+            continue
         therapist = await db.therapist.find_unique(
             where={"id": session.therapistId}
         )
@@ -83,6 +103,7 @@ async def get_patient_dashboard(db: Prisma, user_id: str):
             "type": session.type,
             "status": session.status,
         }
+        break
 
     code = user.referralCode
     if not code:

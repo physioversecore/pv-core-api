@@ -1,13 +1,34 @@
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from .conftest import MOCK_PATIENT, MOCK_SESSION, MOCK_THERAPIST_PROFILE
+
+FUTURE_DATE = datetime(2027, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+PAST_DATE = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+
+
+def make_session(date=FUTURE_DATE, time="10:00", status="SCHEDULED"):
+    return MOCK_SESSION.__class__(
+        id=MOCK_SESSION.id,
+        therapistId=MOCK_SESSION.therapistId,
+        patientId=MOCK_SESSION.patientId,
+        date=date,
+        time=time,
+        type=MOCK_SESSION.type,
+        status=status,
+        address=MOCK_SESSION.address,
+        fee=MOCK_SESSION.fee,
+        notes=MOCK_SESSION.notes,
+        createdAt=MOCK_SESSION.createdAt,
+        updatedAt=MOCK_SESSION.updatedAt,
+    )
 
 
 class TestPatientDashboard:
     def test_dashboard_success(self, patient_client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT
         mock_db.session.count.return_value = 5
-        mock_db.session.find_first.return_value = MOCK_SESSION
+        mock_db.session.find_many.return_value = [make_session()]
         mock_db.therapist.find_unique.return_value = MOCK_THERAPIST_PROFILE
 
         response = patient_client.get("/api/v1/patients/me/dashboard")
@@ -23,10 +44,37 @@ class TestPatientDashboard:
         assert body["nextSession"]["therapistName"] == "Dr. Therapist"
         assert body["nextSession"]["therapistId"] == "therapist-1"
 
+    def test_dashboard_ignores_past_sessions(self, patient_client, mock_db):
+        mock_db.user.find_unique.return_value = MOCK_PATIENT
+        mock_db.session.count.return_value = 1
+        mock_db.session.find_many.return_value = [make_session(date=PAST_DATE)]
+
+        response = patient_client.get("/api/v1/patients/me/dashboard")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["nextSession"] is None
+
+    def test_dashboard_picks_first_future_session(self, patient_client, mock_db):
+        mock_db.user.find_unique.return_value = MOCK_PATIENT
+        mock_db.session.count.return_value = 2
+        mock_db.session.find_many.return_value = [
+            make_session(date=PAST_DATE),
+            make_session(date=FUTURE_DATE),
+        ]
+        mock_db.therapist.find_unique.return_value = MOCK_THERAPIST_PROFILE
+
+        response = patient_client.get("/api/v1/patients/me/dashboard")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["nextSession"]["therapistName"] == "Dr. Therapist"
+        assert body["nextSession"]["date"] == FUTURE_DATE.isoformat()
+
     def test_dashboard_no_sessions(self, patient_client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT
         mock_db.session.count.return_value = 0
-        mock_db.session.find_first.return_value = None
+        mock_db.session.find_many.return_value = []
 
         response = patient_client.get("/api/v1/patients/me/dashboard")
 
@@ -61,7 +109,7 @@ class TestPatientDashboard:
         mock_db.user.find_unique.side_effect = find_unique_side_effect
         mock_db.user.update.return_value = patient_no_ref
         mock_db.session.count.return_value = 0
-        mock_db.session.find_first.return_value = None
+        mock_db.session.find_many.return_value = []
 
         with patch("app.services.patient.generate_referral_code", return_value="SAHA-FRESH123"):
             response = patient_client.get("/api/v1/patients/me/dashboard")

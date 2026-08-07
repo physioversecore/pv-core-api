@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from datetime import date, datetime
+
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -19,6 +21,36 @@ from app import (
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
 
+def _profile_response(profile, user) -> PatientProfileResponse:
+    dob_iso = profile.dob.isoformat() if profile.dob else None
+    age = None
+    if profile.dob:
+        today = date.today()
+        age = today.year - profile.dob.year - (
+            (today.month, today.day) < (profile.dob.month, profile.dob.day)
+        )
+    return PatientProfileResponse(
+        id=profile.id,
+        userId=profile.userId,
+        name=profile.name,
+        phone=profile.phone,
+        city=profile.city,
+        address=profile.address,
+        history=profile.history,
+        dob=dob_iso,
+        age=age,
+        gender=profile.gender,
+        condition=user.condition if user else None,
+        emergencyName=profile.emergencyName,
+        emergencyRelation=profile.emergencyRelation,
+        emergencyPhone=profile.emergencyPhone,
+        notifEmail=profile.notifEmail,
+        notifSms=profile.notifSms,
+        createdAt=profile.createdAt.isoformat(),
+        updatedAt=profile.updatedAt.isoformat(),
+    )
+
+
 @router.get("/me/profile", response_model=PatientProfileResponse)
 async def get_profile(
     current_user=Depends(get_current_user),
@@ -30,20 +62,8 @@ async def get_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Patient profile not found",
         )
-    return PatientProfileResponse(
-        id=profile.id,
-        userId=profile.userId,
-        name=profile.name,
-        phone=profile.phone,
-        city=profile.city,
-        address=profile.address,
-        history=profile.history,
-        gender=profile.gender,
-        notifEmail=profile.notifEmail,
-        notifSms=profile.notifSms,
-        createdAt=profile.createdAt.isoformat(),
-        updatedAt=profile.updatedAt.isoformat(),
-    )
+    user = await db.user.find_unique(where={"id": current_user.id})
+    return _profile_response(profile, user)
 
 
 @router.put("/me/profile", response_model=PatientProfileResponse)
@@ -53,21 +73,11 @@ async def update_profile(
     db: Prisma = Depends(get_db),
 ):
     update_dict = data.model_dump(exclude_unset=True)
+    if update_dict.get("dob"):
+        update_dict["dob"] = datetime.fromisoformat(update_dict["dob"])
     profile = await upsert_patient_profile(db, current_user.id, update_dict)
-    return PatientProfileResponse(
-        id=profile.id,
-        userId=profile.userId,
-        name=profile.name,
-        phone=profile.phone,
-        city=profile.city,
-        address=profile.address,
-        history=profile.history,
-        gender=profile.gender,
-        notifEmail=profile.notifEmail,
-        notifSms=profile.notifSms,
-        createdAt=profile.createdAt.isoformat(),
-        updatedAt=profile.updatedAt.isoformat(),
-    )
+    user = await db.user.find_unique(where={"id": current_user.id})
+    return _profile_response(profile, user)
 
 
 @router.get("/me/dashboard", response_model=PatientDashboardResponse)
