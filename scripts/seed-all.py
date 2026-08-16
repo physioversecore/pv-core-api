@@ -16,7 +16,7 @@ SCRIPTS_DIR = Path(__file__).parent
 
 SCRIPTS = [
     "seed-users.py",
-    "seed-patient-profiles.py",
+    # "seed-patient-profiles.py",
     "seed-therapists.py",
     "seed-products.py",
     "seed-sessions.py",
