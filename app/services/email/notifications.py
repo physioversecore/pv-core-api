@@ -32,21 +32,39 @@ def _render_application_received_email(name: str) -> str:
     )
 
 
-def _render_account_verified_email(name: str) -> str:
+def _render_account_verified_email(
+    name: str, username: str = "", temp_password: str | None = None
+) -> str:
     with open(ACCOUNT_VERIFIED_TEMPLATE_PATH) as f:
         tmpl = Template(f.read())
+
+    if temp_password:
+        title = "Your account has been approved"
+        status_title = "Approved"
+        body_line2 = (
+            f"Congratulations! Your therapist account on Sahayatri Physio has been approved. "
+            f"Use the temporary password below to log in for the first time."
+        )
+        body_line3 = "You will be asked to set your own password right after your first login."
+    else:
+        title = "Your account has been verified"
+        status_title = "Verified"
+        body_line2 = "Congratulations! Your therapist account on Sahayatri Physio has been verified."
+        body_line3 = "You can now log in to your therapist dashboard with the email address and password you registered with."
 
     return tmpl.render(
         brand_name="Sahayatri Physio",
         tagline="Your physiotherapy recovery partner",
-        title="Your account has been verified",
+        title=title,
         name=_first_name(name),
-        body_line1="Congratulations! Your therapist account on Sahayatri Physio has been verified.",
+        body_line1="Congratulations! Your therapist account on Sahayatri Physio is ready to use.",
         status_label="Account status",
-        status_title="Verified",
-        body_line2="You can now log in to your therapist dashboard with the email address and password you used to register.",
-        body_line3="Set up your availability so patients in your area can start booking sessions with you.",
+        status_title=status_title,
+        body_line2=body_line2,
+        body_line3=body_line3,
         body_line4="If you have any questions, please contact our support team.",
+        username=username,
+        temp_password=temp_password or "",
         footer_line1="Sahayatri Physio — Home-visit physiotherapy in Nepal.",
         footer_line2="This is an automated message, please do not reply.",
     )
@@ -80,11 +98,16 @@ async def send_application_received_email(email: str, name: str = "") -> None:
     )
 
 
-async def send_account_verified_email(email: str, name: str = "") -> None:
+async def send_account_verified_email(
+    email: str,
+    name: str = "",
+    temp_password: str | None = None,
+    username: str = "",
+) -> None:
     await dispatch_email(
         to=email,
-        subject=f"Your {settings.smtp_from_name} account has been verified",
-        html=_render_account_verified_email(name),
+        subject=f"Your {settings.smtp_from_name} account has been approved",
+        html=_render_account_verified_email(name, username, temp_password),
     )
 
 

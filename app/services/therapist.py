@@ -16,7 +16,12 @@ async def get_therapists(
 ):
     where = {}
     if search:
-        where["name"] = {"contains": search, "mode": "insensitive"}
+        where["OR"] = [
+            {"name": {"contains": search, "mode": "insensitive"}},
+            {"specialty": {"contains": search, "mode": "insensitive"}},
+            {"city": {"contains": search, "mode": "insensitive"}},
+            {"gender": {"contains": search, "mode": "insensitive"}},
+        ]
     if city:
         where["city"] = city
     if specialty:

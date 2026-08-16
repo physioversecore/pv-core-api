@@ -3,7 +3,9 @@ from app.services.auth import (
     create_access_token,
     create_therapist_signup,
     create_user,
+    generate_temp_password,
     hash_password,
+    set_temporary_password,
     update_user,
     verify_password,
 )

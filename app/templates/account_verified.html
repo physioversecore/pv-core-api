@@ -46,6 +46,26 @@
               <p style="margin:0 0 8px;color:#5A6B6F;font-size:14px;line-height:1.6;">
                 {{ body_line2 }}
               </p>
+
+              {% if temp_password %}
+              <!-- Login credentials box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td align="left" style="background-color:#FBFBF8;border:2px solid #F4E700;border-radius:12px;padding:20px;">
+                    <p style="margin:0 0 10px;color:#8A9699;font-size:12px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">
+                      Your login details
+                    </p>
+                    <p style="margin:0 0 6px;color:#1E2A2E;font-size:14px;">
+                      Username: <strong style="font-weight:700;">{{ username }}</strong>
+                    </p>
+                    <p style="margin:0;color:#1E2A2E;font-size:14px;">
+                      Temporary password: <strong style="font-weight:700;font-family:monospace;font-size:15px;background-color:#F4E700;padding:2px 8px;border-radius:4px;">{{ temp_password }}</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              {% endif %}
+
               <p style="margin:0 0 8px;color:#5A6B6F;font-size:13px;line-height:1.5;">
                 {{ body_line3 }}
               </p>

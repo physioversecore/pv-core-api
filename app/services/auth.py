@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import secrets
+import string
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -15,6 +17,25 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+def generate_temp_password(length: int = 12) -> str:
+    """Generate a readable, secure temporary password used for therapist
+    accounts created without a password by the self-signup application."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+async def set_temporary_password(db: Prisma, user_id: str) -> str:
+    """Store a fresh temporary password for an approved therapist account and
+    flag it so the first login forces a password change. Returns the plaintext
+    temporary password so the caller can email it to the user."""
+    temp = generate_temp_password()
+    await db.user.update(
+        where={"id": user_id},
+        data={"password": hash_password(temp), "mustChangePassword": True},
+    )
+    return temp
 
 
 def create_access_token(user_id: str) -> str:

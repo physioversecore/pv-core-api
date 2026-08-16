@@ -11,7 +11,7 @@ class VerificationDoc(BaseModel):
 class SignupRequest(BaseModel):
     name: str
     email: EmailStr
-    password: str
+    password: str | None = None
     role: str = "PATIENT"
     city: str | None = None
     phone: str | None = None
@@ -45,6 +45,7 @@ class UserResponse(BaseModel):
     specialty: str | None = None
     status: str
     photo: str | None = None
+    mustChangePassword: bool = False
 
     class Config:
         from_attributes = True

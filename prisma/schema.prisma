@@ -58,6 +58,7 @@ model User {
   condition     String?
   specialty     String?
   status        UserStatus @default(PENDING)
+  mustChangePassword Boolean @default(false)
   referralCode  String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

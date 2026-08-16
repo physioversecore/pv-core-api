@@ -15,6 +15,7 @@ from app.services.email.notifications import (
     send_account_verified_email,
     send_application_rejected_email,
 )
+from app.services.auth import set_temporary_password
 from app.models.admin import (
     AdminBookingData,
     AdminBookingListResponse,
@@ -254,8 +255,17 @@ async def approve_therapist_admin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     _, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "APPROVED":
+        temp_password = None
+        if getattr(user, "mustChangePassword", False):
+            # Therapist applied without a password — issue a temporary password
+            # that is emailed to them so they can log in and set their own.
+            temp_password = await set_temporary_password(db, user.id)
         background_tasks.add_task(
-            send_account_verified_email, user.email, user.name
+            send_account_verified_email,
+            user.email,
+            user.name,
+            temp_password,
+            user.email,
         )
     return result
 
@@ -806,8 +816,18 @@ async def update_verification_endpoint(
     if user:
         new_status = payload.get("status")
         if new_status == "Verified" and user.status != "APPROVED":
+            temp_password = None
+            if getattr(user, "mustChangePassword", False):
+                # Therapist applied without a password — issue a temporary
+                # password that is emailed to them so they can log in and set
+                # their own.
+                temp_password = await set_temporary_password(db, user.id)
             background_tasks.add_task(
-                send_account_verified_email, user.email, user.name
+                send_account_verified_email,
+                user.email,
+                user.name,
+                temp_password,
+                user.email,
             )
         elif new_status == "Rejected":
             background_tasks.add_task(

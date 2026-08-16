@@ -19,9 +19,11 @@ from app import (
     create_therapist_signup,
     create_user,
     generate_referral_code,
+    generate_temp_password,
     get_current_user,
     get_db,
     hash_password,
+    set_temporary_password,
     update_user,
     verify_password,
 )
@@ -124,10 +126,21 @@ async def signup(
 
     role_val = data.role.upper()
     if role_val == "PATIENT":
+        if not payload.get("password"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password is required",
+            )
         user_data["referralCode"] = generate_referral_code()
 
     if role_val == "THERAPIST":
         user_data["status"] = "PENDING"
+        # Therapists apply without a password. Store a random placeholder that is
+        # never emailed — the admin approval step replaces it with a real
+        # temporary password that is emailed to the therapist.
+        if not payload.get("password"):
+            user_data["password"] = generate_temp_password()
+            user_data["mustChangePassword"] = True
 
     user = await create_user(db, user_data)
 
@@ -258,7 +271,11 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    await update_user(db, current_user.id, {"password": hash_password(data.new_password)})
+    await update_user(
+        db,
+        current_user.id,
+        {"password": hash_password(data.new_password), "mustChangePassword": False},
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

@@ -35,6 +35,32 @@ class TestListTherapists:
         assert response.status_code == 200
         assert response.json()["total"] == 0
 
+    def test_list_therapists_search_matches_multiple_fields(self, client, mock_db):
+        mock_db.therapist.find_many.return_value = []
+        mock_db.therapist.count.return_value = 0
+
+        response = client.get("/api/v1/therapists?search=Kathmandu")
+
+        assert response.status_code == 200
+        _, kwargs = mock_db.therapist.find_many.call_args
+        assert kwargs["where"]["OR"] == [
+            {"name": {"contains": "Kathmandu", "mode": "insensitive"}},
+            {"specialty": {"contains": "Kathmandu", "mode": "insensitive"}},
+            {"city": {"contains": "Kathmandu", "mode": "insensitive"}},
+            {"gender": {"contains": "Kathmandu", "mode": "insensitive"}},
+        ]
+
+    def test_list_therapists_search_combines_with_exact_filters(self, client, mock_db):
+        mock_db.therapist.find_many.return_value = []
+        mock_db.therapist.count.return_value = 0
+
+        response = client.get("/api/v1/therapists?search=Male&specialty=Physiotherapy")
+
+        assert response.status_code == 200
+        _, kwargs = mock_db.therapist.find_many.call_args
+        assert kwargs["where"]["OR"] is not None
+        assert kwargs["where"]["specialty"] == "Physiotherapy"
+
 
 class TestGetMyProfile:
     def test_get_my_profile_success(self, therapist_client, mock_db):

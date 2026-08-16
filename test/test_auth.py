@@ -198,6 +198,54 @@ class TestTherapistSignupApproval:
         mock_email.assert_awaited_once_with("newtherapist@test.com", "New Therapist")
         mock_token.assert_not_called()
 
+    @patch("app.routers.auth.create_therapist_signup", new_callable=AsyncMock)
+    @patch("app.routers.auth.send_application_received_email", new_callable=AsyncMock, return_value=True)
+    @patch("app.routers.auth.create_access_token")
+    def test_therapist_signup_without_password_sets_must_change(
+        self, mock_token, mock_email, mock_cts, client, mock_db
+    ):
+        pending = self._pending_therapist()
+        pending.mustChangePassword = True
+        mock_db.user.find_unique.return_value = None
+        mock_db.user.create.return_value = pending
+        mock_db.emailverification.find_first.return_value = SimpleNamespace(
+            id="otp-1", email="newtherapist@test.com", code="123456", purpose="signup",
+            used=True, attempts=0, createdAt=NOW, expiresAt=NOW + timedelta(minutes=5),
+        )
+
+        response = client.post(
+            "/api/v1/auth/signup",
+            json={
+                "name": "New Therapist",
+                "email": "newtherapist@test.com",
+                "role": "THERAPIST",
+                "specialty": "Physiotherapy",
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["access_token"] is None
+        assert body["user"]["status"] == "PENDING"
+        assert body["user"]["mustChangePassword"] is True
+        mock_token.assert_not_called()
+
+    @patch("app.routers.auth.generate_temp_password", return_value="placeholder123")
+    def test_patient_signup_requires_password(self, mock_gen, client, mock_db):
+        mock_db.user.find_unique.return_value = None
+        mock_db.emailverification.find_first.return_value = SimpleNamespace(
+            id="otp-1", email="patient@test.com", code="123456", purpose="signup",
+            used=True, attempts=0, createdAt=NOW, expiresAt=NOW + timedelta(minutes=5),
+        )
+
+        response = client.post(
+            "/api/v1/auth/signup",
+            json={"name": "New Patient", "email": "new@test.com", "role": "PATIENT"},
+        )
+
+        assert response.status_code == 400
+        assert "Password" in response.json()["detail"]
+
 
 class TestLogin:
     @patch("app.routers.auth.authenticate_user", return_value=MOCK_PATIENT)
@@ -247,13 +295,28 @@ class TestLoginTherapistApprovalGate:
         assert response.status_code == 403
         assert "not approved" in response.json()["detail"]
 
-    @patch("app.routers.auth.authenticate_user", return_value=MOCK_THERAPIST_USER)
+    @patch("app.routers.auth.authenticate_user")
     @patch("app.routers.auth.create_access_token", return_value="mock-token")
     def test_login_approved_therapist_allowed(self, mock_token, mock_auth, client):
+        mock_auth.return_value = self._therapist("APPROVED")
+
         response = client.post("/api/v1/auth/login", json=LOGIN_DATA)
 
         assert response.status_code == 200
         assert response.json()["access_token"] == "mock-token"
+        assert response.json()["user"]["mustChangePassword"] is False
+
+    @patch("app.routers.auth.create_access_token", return_value="mock-token")
+    @patch("app.routers.auth.authenticate_user")
+    def test_login_temp_password_user_flagged(self, mock_auth, mock_token, client):
+        therapist = self._therapist("APPROVED")
+        therapist.mustChangePassword = True
+        mock_auth.return_value = therapist
+
+        response = client.post("/api/v1/auth/login", json=LOGIN_DATA)
+
+        assert response.status_code == 200
+        assert response.json()["user"]["mustChangePassword"] is True
 
 
 class TestMe:
@@ -286,6 +349,9 @@ class TestChangePassword:
         )
 
         assert response.status_code == 204
+        mock_db.user.update.assert_awaited_once()
+        update_data = mock_db.user.update.await_args.kwargs["data"]
+        assert update_data["mustChangePassword"] is False
 
     def test_change_password_wrong_current(self, patient_client):
         response = patient_client.post(
