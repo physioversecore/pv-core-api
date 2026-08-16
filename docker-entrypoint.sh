@@ -4,8 +4,11 @@ set -e
 echo "Generating Prisma client..."
 uv run prisma generate
 
-echo "Deploying Prisma migrations..."
-uv run prisma migrate db push
+echo "Reseting Database and apply all migration"
+uv run prisma migrate reset
+
+echo "Applying all Pending Prisma migrations..."
+uv run prisma migrate deploy
 
 echo "Prisma migrations and client generation completed."
 
