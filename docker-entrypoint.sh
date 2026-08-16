@@ -4,16 +4,14 @@ set -e
 echo "Generating Prisma client..."
 uv run prisma generate
 
-echo "Reseting Database and apply all migration"
-uv run prisma migrate reset --force
+echo "Checking Prisma migration status..."
+uv run prisma migrate status
 
-echo "Applying all Pending Prisma migrations..."
+echo "Applying pending Prisma migrations..."
 uv run prisma migrate deploy
 
-echo "Prisma migrations and client generation completed."
-
-echo "Starting Seeding On Mock Data..."
-uv run scripts/seed-all.py
+echo "Checking Prisma migration status after deploy..."
+uv run prisma migrate status
 
 echo "Starting application..."
 uv run main.py
