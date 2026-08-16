@@ -5,7 +5,7 @@ echo "Generating Prisma client..."
 uv run prisma generate
 
 echo "Reseting Database and apply all migration"
-uv run prisma migrate reset
+uv run prisma migrate reset --force
 
 echo "Applying all Pending Prisma migrations..."
 uv run prisma migrate deploy
