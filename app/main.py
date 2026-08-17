@@ -27,6 +27,7 @@ from app.routers import (
     cart_router,
     clinics_router,
     earnings_router,
+    packages_router,
     patients_router,
     payments_router,
     products_router,
@@ -137,6 +138,7 @@ app.include_router(settings_router, prefix="/api/v1")
 app.include_router(availability_router, prefix="/api/v1")
 app.include_router(service_router, prefix="/api/v1")
 app.include_router(clinics_router, prefix="/api/v1")
+app.include_router(packages_router, prefix="/api/v1")
 
 
 @app.get("/health")

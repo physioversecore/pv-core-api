@@ -164,3 +164,10 @@ from app.services.clinic import (
     get_clinics,
     update_clinic,
 )
+from app.services.package import (
+    create_package,
+    delete_package,
+    get_package,
+    get_packages,
+    update_package,
+)

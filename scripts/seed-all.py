@@ -30,6 +30,8 @@ SCRIPTS = [
     "seed-services.py",
     "seed-referral-codes.py",
     "seed-refunds.py",
+    "seed-clinics.py",
+    "seed-packages.py"
 ]
 
 

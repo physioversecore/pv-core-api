@@ -145,3 +145,9 @@ from app.models.clinic import (
     ClinicResponse,
     ClinicUpdate,
 )
+from app.models.package import (
+    PackageCreate,
+    PackageListResponse,
+    PackageResponse,
+    PackageUpdate,
+)
