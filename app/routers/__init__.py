@@ -14,3 +14,4 @@ from app.routers.settings import router as settings_router
 from app.routers.therapists import router as therapists_router
 from app.routers.uploads import router as uploads_router
 from app.routers.patients import router as patients_router
+from app.routers.clinics import router as clinics_router

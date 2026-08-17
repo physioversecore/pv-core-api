@@ -513,3 +513,18 @@ model EmailVerification {
   @@index([email, purpose])
   @@index([expiresAt])
 }
+
+model Clinic {
+  id        String   @id @default(cuid())
+  name      String
+  area      String
+  city      String
+  address   String
+  services  String[]
+  phone     String
+  hours     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([city])
+}

@@ -157,3 +157,10 @@ from app.services.service import (
     get_services,
     update_service,
 )
+from app.services.clinic import (
+    create_clinic,
+    delete_clinic,
+    get_clinic,
+    get_clinics,
+    update_clinic,
+)

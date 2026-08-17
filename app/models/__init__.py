@@ -139,3 +139,9 @@ from app.models.service import (
     ServiceResponse,
     ServiceUpdate,
 )
+from app.models.clinic import (
+    ClinicCreate,
+    ClinicListResponse,
+    ClinicResponse,
+    ClinicUpdate,
+)
