@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_resend_cooldown_seconds: int = 120
 
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
     class Config:
         env_file = ".env"
 

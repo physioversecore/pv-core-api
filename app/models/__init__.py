@@ -11,6 +11,13 @@ from app.models.auth import (
     VerificationDoc,
     VerifyOtpRequest,
 )
+from app.models.google_auth import GoogleAuthRequest
+from app.models.onboarding import (
+    ApplicationSectionFeedback,
+    ApplicationStatusResponse,
+    OnboardingCompleteRequest,
+    OnboardingStatusResponse,
+)
 from app.models.therapist import (
     TherapistCreate,
     TherapistDashboardResponse,

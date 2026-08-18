@@ -6,6 +6,7 @@ from prisma.enums import Role
 from app import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
+    GoogleAuthRequest,
     LoginRequest,
     ResetPasswordRequest,
     SendOtpRequest,
@@ -18,13 +19,16 @@ from app import (
     create_access_token,
     create_therapist_signup,
     create_user,
+    find_or_create_google_user,
     generate_referral_code,
     generate_temp_password,
     get_current_user,
+    get_current_user_lenient,
     get_db,
     hash_password,
     set_temporary_password,
     update_user,
+    verify_google_credential,
     verify_password,
 )
 from app.services.email.notifications import send_application_received_email
@@ -76,6 +80,69 @@ async def send_verification_otp(
         result["purpose"],
     )
     return {"message": "OTP sent successfully", "resend_after": result["resend_after"]}
+
+
+@router.post("/send-login-otp")
+async def send_login_otp(
+    data: SendOtpRequest,
+    background_tasks: BackgroundTasks,
+    db: Prisma = Depends(get_db),
+):
+    existing = await db.user.find_unique(where={"email": data.email})
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email",
+        )
+
+    result = await create_otp(db, email=data.email, name=data.name or existing.name, purpose="login")
+    if not result["created"]:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {result['resend_after']} seconds before requesting a new code",
+        )
+    background_tasks.add_task(
+        send_otp_email,
+        result["to"],
+        result["name"],
+        result["code"],
+        result["purpose"],
+    )
+    return {"message": "OTP sent successfully", "resend_after": result["resend_after"]}
+
+
+@router.post("/login-otp", response_model=TokenResponse)
+async def login_with_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db)):
+    valid = await verify_otp(db, email=data.email, code=data.code, purpose="login")
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code",
+        )
+
+    user = await db.user.find_unique(where={"email": data.email})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email",
+        )
+
+    if user.role == "THERAPIST" and user.status != "APPROVED":
+        detail = (
+            "Your application is under review. You will be able to log in once it is approved."
+            if user.status == "PENDING"
+            else "Your application was not approved. Please contact support."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+
+    token = create_access_token(user.id)
+    return TokenResponse(
+        access_token=token,
+        user=await _user_with_photo(db, user),
+    )
 
 
 @router.post("/verify-otp")
@@ -147,12 +214,13 @@ async def signup(
     if role_val == "THERAPIST":
         await create_therapist_signup(db, user, payload)
 
-    # Therapist applications require admin approval before they can log in.
-    # Do not issue a token until the admin sets their status to APPROVED.
+    # Therapist applications require admin approval before they can log in to
+    # normal pages, but they need a token to complete onboarding.
     if role_val == "THERAPIST":
         background_tasks.add_task(send_application_received_email, user.email, user.name)
+        token = create_access_token(user.id)
         return TokenResponse(
-            access_token=None,
+            access_token=token,
             user=await _user_with_photo(db, user),
         )
 
@@ -191,7 +259,7 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 async def me(
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_current_user_lenient),
     db: Prisma = Depends(get_db),
 ):
     return await _user_with_photo(db, current_user)
@@ -281,3 +349,49 @@ async def change_password(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout():
     return None
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_auth(
+    data: GoogleAuthRequest,
+    background_tasks: BackgroundTasks,
+    db: Prisma = Depends(get_db),
+):
+    google_user = await verify_google_credential(data.credential)
+    if not google_user or not google_user.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google credential",
+        )
+
+    try:
+        user, created = await find_or_create_google_user(db, google_user, data.role)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    if user.role == "THERAPIST" and user.status != "APPROVED":
+        detail = (
+            "Your application is under review. You will be able to log in once it is approved."
+            if user.status == "PENDING"
+            else "Your application was not approved. Please contact support."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+
+    token = create_access_token(user.id)
+    return TokenResponse(
+        access_token=token,
+        user=await _user_with_photo(db, user),
+    )
+
+
+@router.post("/check-email")
+async def check_email(data: dict, db: Prisma = Depends(get_db)):
+    email = data.get("email", "")
+    user = await db.user.find_unique(where={"email": email})
+    return {"exists": user is not None, "role": user.role.lower() if user else None}

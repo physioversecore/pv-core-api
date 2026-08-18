@@ -67,6 +67,75 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_lenient(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Prisma = Depends(get_db),
+):
+    """Like get_current_user but does NOT block PENDING/INCOMPLETE therapists.
+    Used for /auth/me so the auth context can load the user during onboarding."""
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    user = await db.user.find_unique(where={"id": user_id})
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    return user
+
+
+async def get_therapist_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Prisma = Depends(get_db),
+):
+    """Like get_current_user but allows PENDING/INCOMPLETE therapists
+    so they can complete their onboarding application."""
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    user = await db.user.find_unique(where={"id": user_id})
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    if user.role != "THERAPIST":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Therapist access required",
+        )
+    return user
+
+
 async def get_admin_user(
     current_user=Depends(get_current_user),
 ):

@@ -171,3 +171,14 @@ from app.services.package import (
     get_packages,
     update_package,
 )
+from app.services.google_auth import verify_google_credential, find_or_create_google_user
+from app.services.onboarding import (
+    complete_onboarding,
+    get_onboarding_status,
+    save_onboarding_progress,
+)
+from app.services.therapist_application import (
+    get_application_sections,
+    get_application_status,
+    update_therapist_application,
+)

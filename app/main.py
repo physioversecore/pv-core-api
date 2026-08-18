@@ -36,6 +36,7 @@ from app.routers import (
     service_router,
     sessions_router,
     settings_router,
+    therapist_application_router,
     therapists_router,
     uploads_router,
 )
@@ -123,6 +124,7 @@ if settings.rate_limit_enabled:
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(patients_router, prefix="/api/v1")
+app.include_router(therapist_application_router, prefix="/api/v1")
 app.include_router(therapists_router, prefix="/api/v1")
 app.include_router(earnings_router, prefix="/api/v1")
 app.include_router(sessions_router, prefix="/api/v1")

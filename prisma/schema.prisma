@@ -20,6 +20,14 @@ enum UserStatus {
   REJECTED
 }
 
+enum ApplicationStatus {
+  INCOMPLETE
+  SUBMITTED
+  CHANGES_REQUIRED
+  APPROVED
+  REJECTED
+}
+
 enum SessionStatus {
   SCHEDULED
   IN_PROGRESS
@@ -95,6 +103,8 @@ model PatientProfile {
   emergencyPhone    String?
   notifEmail  Boolean  @default(true)
   notifSms    Boolean  @default(false)
+  onboardingCompleted Boolean @default(false)
+  onboardingStep     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -116,6 +126,7 @@ model Therapist {
   experience Int
   bio        String
   mediaUrls  String?
+  applicationStatus ApplicationStatus @default(INCOMPLETE)
 
   sessionsOverride       Int?
   reviewsOverride        Int?
@@ -136,6 +147,7 @@ model Therapist {
   blockRequests ScheduleBlockRequest[]
   serviceAreas TherapistServiceArea[]
   verifications Verification[]
+  applicationFeedbacks TherapistApplicationFeedback[]
 
   @@index([city])
   @@index([specialty])
@@ -545,4 +557,16 @@ model Package {
   updatedAt DateTime @updatedAt
 
   @@index([isActive])
+}
+
+model TherapistApplicationFeedback {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  section     String
+  message     String
+  adminId     String?
+  createdAt   DateTime @default(now())
+
+  @@index([therapistId])
 }

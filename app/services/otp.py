@@ -34,6 +34,21 @@ def _render_otp_email(name: str, code: str, purpose: str = "signup") -> str:
             footer_line2="This is an automated message, please do not reply.",
         )
 
+    if purpose == "login":
+        return tmpl.render(
+            brand_name="Sahayatri Physio",
+            tagline="Your physiotherapy recovery partner",
+            title="Sign in to your account",
+            name=name.split()[0] if name else "there",
+            body_line1="Use the code below to sign in. This code is valid for a limited time.",
+            otp_label="Your sign-in code",
+            otp_code=code,
+            body_line2="If you didn't request to sign in, you can safely ignore this email.",
+            body_line3=f"This code expires in {settings.otp_expire_minutes} minutes.",
+            footer_line1="Sahayatri Physio — Home-visit physiotherapy in Nepal.",
+            footer_line2="This is an automated message, please do not reply.",
+        )
+
     return tmpl.render(
         brand_name="Sahayatri Physio",
         tagline="Your physiotherapy recovery partner",

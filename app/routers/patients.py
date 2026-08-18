@@ -5,16 +5,21 @@ from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    OnboardingCompleteRequest,
+    OnboardingStatusResponse,
     PatientDashboardResponse,
     PatientProfileResponse,
     PatientProfileUpdate,
     ReferralResponse,
+    complete_onboarding,
     get_current_user,
     get_db,
     get_my_patients,
+    get_onboarding_status,
     get_patient_dashboard,
     get_patient_profile,
     get_patient_referral,
+    save_onboarding_progress,
     upsert_patient_profile,
 )
 
@@ -112,3 +117,31 @@ async def my_patients(
     return await get_my_patients(
         db, current_user.id, search=search, condition=condition, skip=skip, limit=limit
     )
+
+
+@router.get("/me/onboarding-status")
+async def onboarding_status(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    return await get_onboarding_status(db, current_user.id)
+
+
+@router.post("/me/onboarding")
+async def onboarding(
+    data: OnboardingCompleteRequest,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    return await complete_onboarding(db, current_user.id, data.model_dump(exclude_unset=True))
+
+
+@router.post("/me/onboarding/progress")
+async def onboarding_progress(
+    data: dict,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    step = data.pop("step", "personal")
+    await save_onboarding_progress(db, current_user.id, step, data)
+    return {"success": True}
