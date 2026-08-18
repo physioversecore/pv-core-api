@@ -104,6 +104,11 @@ async def update_verification(db: Prisma, verification_id: str, data: dict):
                 where={"id": user.id},
                 data={"status": "APPROVED" if new_status == "Verified" else "REJECTED"},
             )
+        if updated.therapist:
+            await db.therapist.update(
+                where={"id": updated.therapistId},
+                data={"applicationStatus": "APPROVED" if new_status == "Verified" else "REJECTED"},
+            )
 
     return _build_verification_response(updated)
 

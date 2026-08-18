@@ -198,14 +198,17 @@ async def update_admin_therapist(db: Prisma, key: str, data: dict):
         await db.therapist.update(where={"id": t.id}, data=therapist_fields)
     if user_fields:
         await db.user.update(where={"id": u.id}, data=user_fields)
+        if t and "status" in user_fields:
+            app_status = "APPROVED" if user_fields["status"] == "APPROVED" else "REJECTED"
+            await db.therapist.update(where={"id": t.id}, data={"applicationStatus": app_status})
 
     return await get_admin_therapist(db, u.id)
 
 
 async def approve_admin_therapist(db: Prisma, key: str) -> dict | None:
-    """Approve a therapist: flip the user to APPROVED and mark any pending
-    verification documents as Verified so the account unlock is consistent
-    with the /admin/verification flow."""
+    """Approve a therapist: flip the user to APPROVED, mark any pending
+    verification documents as Verified, and advance the application status
+    so the frontend routes them to the dashboard instead of onboarding."""
     t, u = await resolve_therapist_user(db, key)
     if not u:
         return None
@@ -215,13 +218,18 @@ async def approve_admin_therapist(db: Prisma, key: str) -> dict | None:
             where={"therapistId": t.id, "status": "Pending review"},
             data={"status": "Verified"},
         )
+        await db.therapist.update(
+            where={"id": t.id},
+            data={"applicationStatus": "APPROVED"},
+        )
     return await get_admin_therapist(db, u.id)
 
 
 async def reject_admin_therapist(db: Prisma, key: str, note: str = "") -> dict | None:
     """Reject a therapist: flip the user to REJECTED, mark pending verification
     documents as Rejected with the admin's note (shown to the therapist and in
-    the admin detail view), and let the router fire the rejection email."""
+    the admin detail view), and advance the application status so the frontend
+    shows the rejection screen instead of onboarding."""
     t, u = await resolve_therapist_user(db, key)
     if not u:
         return None
@@ -233,6 +241,10 @@ async def reject_admin_therapist(db: Prisma, key: str, note: str = "") -> dict |
         await db.verification.update_many(
             where={"therapistId": t.id, "status": "Pending review"},
             data=update_data,
+        )
+        await db.therapist.update(
+            where={"id": t.id},
+            data={"applicationStatus": "REJECTED"},
         )
     return await get_admin_therapist(db, u.id)
 
@@ -812,7 +824,7 @@ async def resolve_therapist(db: Prisma, therapist_id: str):
     )
     await db.therapist.update(
         where={"id": therapist_id},
-        data={"statusOverride": None},
+        data={"statusOverride": None, "applicationStatus": "APPROVED"},
     )
 
     return await get_admin_performance_detail(db, therapist_id)
@@ -844,7 +856,7 @@ async def remove_from_team(db: Prisma, therapist_id: str, reason: str = ""):
     )
     await db.therapist.update(
         where={"id": therapist_id},
-        data={"statusOverride": "Removed"},
+        data={"statusOverride": "Removed", "applicationStatus": "REJECTED"},
     )
 
     return {
