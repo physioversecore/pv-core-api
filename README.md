@@ -6,7 +6,7 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python 3.13**
 
 - JWT-based authentication (signup, login, role-based access)
 - Therapist management (profiles, listings, approvals, verification)
-- Therapist self-signup with document uploads (NMC license + certification) feeding admin verification
+- Therapist self-signup with document uploads (NMC license + certification) feeding admin verification — therapists receive a JWT on signup so the frontend can redirect them to the onboarding flow to complete their profile
 - Session booking (home visit / clinic, scheduling, reschedule, status tracking)
 - Therapist availability (working hours, slots, recurring patterns, block time off, audit log, block requests)
 - Product shop (equipment, medicine, nutrition — buy or rent)
