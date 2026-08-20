@@ -94,6 +94,7 @@ model PatientProfile {
   name        String
   phone       String
   city        String
+  photo       String?
   address     String?
   history     String?
   dob         DateTime?
@@ -108,7 +109,25 @@ model PatientProfile {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  familyMembers FamilyMember[]
+
   @@index([userId])
+}
+
+model FamilyMember {
+  id            String   @id @default(cuid())
+  patientId     String
+  patient       PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name          String
+  relationship  String
+  dob           DateTime?
+  phone         String?
+  gender        String?
+  condition     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([patientId])
 }
 
 model Therapist {

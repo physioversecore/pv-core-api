@@ -15,6 +15,7 @@ router = APIRouter(prefix="/uploads", tags=["Uploads"])
 UPLOAD_ROOT = Path(__file__).resolve().parent.parent.parent / "Upload"
 REPORTS_ROOT = UPLOAD_ROOT / "Reports"
 THERAPISTS_ROOT = UPLOAD_ROOT / "Therapists"
+PATIENTS_ROOT = UPLOAD_ROOT / "Patients"
 APPLICATIONS_ROOT = UPLOAD_ROOT / "TherapistApplications"
 EVIDENCE_ROOT = UPLOAD_ROOT / "ComplaintEvidence"
 
@@ -406,6 +407,117 @@ async def delete_therapist_photo(
     )
 
     return {"success": True, "removed": len(removed)}
+
+
+# ---------------------------------------------------------------------------
+# Patient profile photo
+# ---------------------------------------------------------------------------
+
+@router.post("/patients/{patient_id}/photo")
+async def upload_patient_photo(
+    patient_id: str,
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Upload a profile photo for a patient (own profile or admin)."""
+    patient_id = _sanitize_id(patient_id)
+
+    profile = await db.patientprofile.find_unique(where={"id": patient_id})
+    if not profile:
+        profile = await db.patientprofile.find_unique(where={"userId": patient_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    if current_user.role not in (Role.PATIENT, Role.ADMIN):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.role == Role.PATIENT and profile.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    original = file.filename or "photo"
+    ext = _validate_photo_extension(original)
+
+    content = await file.read()
+    _validate_upload_size(content)
+
+    patient_dir = PATIENTS_ROOT / profile.id
+    patient_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove old photo if exists
+    if profile.photo:
+        old_filename = profile.photo.split("?")[0].split("/")[-1]
+        old_path = (patient_dir / old_filename).resolve()
+        if str(old_path).startswith(str(PATIENTS_ROOT.resolve())) and old_path.is_file():
+            old_path.unlink(missing_ok=True)
+
+    filename = f"photo-{uuid.uuid4().hex}{ext}"
+    dest = patient_dir / filename
+    with open(dest, "wb") as out:
+        out.write(content)
+
+    url = f"/api/v1/uploads/patients/{profile.id}/{filename}?name={original}&size={len(content)}"
+
+    await db.patientprofile.update(
+        where={"id": profile.id},
+        data={"photo": url},
+    )
+
+    return {"url": url}
+
+
+@router.delete("/patients/{patient_id}/photo")
+async def delete_patient_photo(
+    patient_id: str,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Remove the profile photo for a patient (own profile or admin)."""
+    patient_id = _sanitize_id(patient_id)
+
+    profile = await db.patientprofile.find_unique(where={"id": patient_id})
+    if not profile:
+        profile = await db.patientprofile.find_unique(where={"userId": patient_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    if current_user.role not in (Role.PATIENT, Role.ADMIN):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user.role == Role.PATIENT and profile.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if profile.photo:
+        filename = profile.photo.split("?")[0].split("/")[-1]
+        file_path = (PATIENTS_ROOT / profile.id / filename).resolve()
+        if str(file_path).startswith(str(PATIENTS_ROOT.resolve())) and file_path.is_file():
+            file_path.unlink(missing_ok=True)
+
+    await db.patientprofile.update(
+        where={"id": profile.id},
+        data={"photo": None},
+    )
+
+    return {"success": True}
+
+
+@router.get("/patients/{patient_id}/{filename}")
+async def serve_patient_file(
+    patient_id: str,
+    filename: str,
+    current_user=Depends(get_current_user),
+):
+    """Serve patient profile files (authenticated)."""
+    patient_id = _sanitize_id(patient_id)
+    file_path = (PATIENTS_ROOT / patient_id / filename).resolve()
+
+    if not str(file_path).startswith(str(PATIENTS_ROOT.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    import mimetypes
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return FileResponse(str(file_path), media_type=media_type)
 
 
 # ---------------------------------------------------------------------------

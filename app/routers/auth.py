@@ -138,7 +138,7 @@ async def login_with_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db)):
             detail=detail,
         )
 
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, role=user.role)
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),
@@ -218,13 +218,13 @@ async def signup(
     # normal pages, but they need a token to complete onboarding.
     if role_val == "THERAPIST":
         background_tasks.add_task(send_application_received_email, user.email, user.name)
-        token = create_access_token(user.id)
+        token = create_access_token(user.id, role=user.role)
         return TokenResponse(
             access_token=token,
             user=await _user_with_photo(db, user),
         )
 
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, role=user.role)
 
     return TokenResponse(
         access_token=token,
@@ -250,7 +250,7 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
         )
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, role=user.role)
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),
@@ -383,7 +383,7 @@ async def google_auth(
             detail=detail,
         )
 
-    token = create_access_token(user.id)
+    token = create_access_token(user.id, role=user.role)
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),

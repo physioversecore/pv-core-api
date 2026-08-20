@@ -60,6 +60,9 @@ from app.models.report import (
     ReportUpdate,
 )
 from app.models.patient import (
+    FamilyMemberCreate,
+    FamilyMemberResponse,
+    FamilyMemberUpdate,
     NextSessionInfo,
     PatientDashboardResponse,
     PatientProfileResponse,

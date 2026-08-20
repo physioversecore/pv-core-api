@@ -40,6 +40,8 @@ from app.models import (
     ClinicResponse,
     ClinicUpdate,
     ForgotPasswordRequest,
+    FamilyMemberCreate,
+    FamilyMemberUpdate,
     GenerateAvailabilityRequest,
     GoogleAuthRequest,
     LoginRequest,

@@ -3,6 +3,18 @@ from datetime import datetime
 from prisma import Prisma
 
 
+def _parse_dob(val):
+    """Convert a date string (YYYY-MM-DD) to a datetime object, or return None."""
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val
+    try:
+        return datetime.fromisoformat(val)
+    except (ValueError, TypeError):
+        return None
+
+
 async def get_onboarding_status(db: Prisma, user_id: str) -> dict:
     """Get the onboarding status for a patient."""
     profile = await db.patientprofile.find_unique(where={"userId": user_id})
@@ -45,6 +57,10 @@ async def save_onboarding_progress(db: Prisma, user_id: str, step: str, data: di
         elif col:
             db_fields[col] = val
 
+    # Convert dob string to datetime for Prisma
+    if "dob" in db_fields:
+        db_fields["dob"] = _parse_dob(db_fields["dob"])
+
     if existing:
         if db_fields:
             update_fields.update(db_fields)
@@ -52,7 +68,7 @@ async def save_onboarding_progress(db: Prisma, user_id: str, step: str, data: di
     else:
         user = await db.user.find_unique(where={"id": user_id})
         create_data = {
-            "userId": user_id,
+            "user": {"connect": {"id": user_id}},
             "name": db_fields.get("name") or (user.name if user else "Patient"),
             "phone": db_fields.get("phone") or (user.phone if user and user.phone else ""),
             "city": db_fields.get("city") or (user.city if user and user.city else "Kathmandu"),

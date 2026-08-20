@@ -5,6 +5,8 @@ from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    FamilyMemberCreate,
+    FamilyMemberUpdate,
     OnboardingCompleteRequest,
     OnboardingStatusResponse,
     PatientDashboardResponse,
@@ -40,6 +42,7 @@ def _profile_response(profile, user) -> PatientProfileResponse:
         name=profile.name,
         phone=profile.phone,
         city=profile.city,
+        photo=profile.photo,
         address=profile.address,
         history=profile.history,
         dob=dob_iso,
@@ -144,4 +147,120 @@ async def onboarding_progress(
 ):
     step = data.pop("step", "personal")
     await save_onboarding_progress(db, current_user.id, step, data)
+    return {"success": True}
+
+
+# ─── Family Members ──────────────────────────────────────────────────────────
+
+async def _get_patient_profile_or_404(db: Prisma, user_id: str):
+    profile = await db.patientprofile.find_unique(where={"userId": user_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+    return profile
+
+
+@router.get("/me/family-members")
+async def list_family_members(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    profile = await _get_patient_profile_or_404(db, current_user.id)
+    members = await db.familymember.find_many(
+        where={"patientId": profile.id},
+        order={"createdAt": "asc"},
+    )
+    return [
+        {
+            "id": m.id,
+            "name": m.name,
+            "relationship": m.relationship,
+            "dob": m.dob.isoformat() if m.dob else None,
+            "phone": m.phone,
+            "gender": m.gender,
+            "condition": m.condition,
+        }
+        for m in members
+    ]
+
+
+@router.post("/me/family-members")
+async def add_family_member(
+    data: FamilyMemberCreate,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    profile = await _get_patient_profile_or_404(db, current_user.id)
+    dob_dt = None
+    if data.dob:
+        try:
+            dob_dt = datetime.fromisoformat(data.dob)
+        except ValueError:
+            pass
+    member = await db.familymember.create(
+        data={
+            "patientId": profile.id,
+            "name": data.name,
+            "relationship": data.relationship,
+            "dob": dob_dt,
+            "phone": data.phone,
+            "gender": data.gender,
+            "condition": data.condition,
+        }
+    )
+    return {
+        "id": member.id,
+        "name": member.name,
+        "relationship": member.relationship,
+        "dob": member.dob.isoformat() if member.dob else None,
+        "phone": member.phone,
+        "gender": member.gender,
+        "condition": member.condition,
+    }
+
+
+@router.put("/me/family-members/{member_id}")
+async def update_family_member(
+    member_id: str,
+    data: FamilyMemberUpdate,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    profile = await _get_patient_profile_or_404(db, current_user.id)
+    member = await db.familymember.find_unique(where={"id": member_id})
+    if not member or member.patientId != profile.id:
+        raise HTTPException(status_code=404, detail="Family member not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+    if "dob" in update_data and update_data["dob"]:
+        try:
+            update_data["dob"] = datetime.fromisoformat(update_data["dob"])
+        except ValueError:
+            update_data.pop("dob")
+    elif "dob" in update_data and update_data["dob"] is None:
+        update_data["dob"] = None
+
+    member = await db.familymember.update(where={"id": member_id}, data=update_data)
+    return {
+        "id": member.id,
+        "name": member.name,
+        "relationship": member.relationship,
+        "dob": member.dob.isoformat() if member.dob else None,
+        "phone": member.phone,
+        "gender": member.gender,
+        "condition": member.condition,
+    }
+
+
+@router.delete("/me/family-members/{member_id}")
+async def delete_family_member(
+    member_id: str,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    profile = await _get_patient_profile_or_404(db, current_user.id)
+    member = await db.familymember.find_unique(where={"id": member_id})
+    if not member or member.patientId != profile.id:
+        raise HTTPException(status_code=404, detail="Family member not found")
+
+    await db.familymember.delete(where={"id": member_id})
     return {"success": True}

@@ -7,12 +7,44 @@ CITIES = ["Kathmandu", "Lalitpur", "Bhaktapur", "Pokhara", "Chitwan", "Biratnaga
 GENDER_OPTIONS = ["Any", "Male", "Female"]
 
 
+class FamilyMemberResponse(BaseModel):
+    id: str
+    name: str
+    relationship: str
+    dob: str | None = None
+    phone: str | None = None
+    gender: str | None = None
+    condition: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class FamilyMemberCreate(BaseModel):
+    name: str
+    relationship: str
+    dob: str | None = None
+    phone: str | None = None
+    gender: str | None = None
+    condition: str | None = None
+
+
+class FamilyMemberUpdate(BaseModel):
+    name: str | None = None
+    relationship: str | None = None
+    dob: str | None = None
+    phone: str | None = None
+    gender: str | None = None
+    condition: str | None = None
+
+
 class PatientProfileResponse(BaseModel):
     id: str
     userId: str
     name: str
     phone: str
     city: str
+    photo: str | None = None
     address: str | None = None
     history: str | None = None
     dob: str | None = None
