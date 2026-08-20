@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     secret_key: str = "super-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
+    jwt_issuer: str = "sahayatri-physio"
+    jwt_audience: str = "sahayatri-physio"
     backend_port: int = Field(
         default=8000,
         validation_alias=AliasChoices("PORT", "BACKEND_PORT"),

@@ -39,10 +39,15 @@ async def set_temporary_password(db: Prisma, user_id: str) -> str:
 
 
 def create_access_token(user_id: str, role: str | None = None) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
-    payload: dict = {"sub": user_id, "exp": expire}
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.access_token_expire_minutes)
+    payload: dict = {
+        "sub": user_id,
+        "exp": expire,
+        "iat": now,
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
+    }
     if role:
         payload["role"] = role.lower()
     return jwt.encode(
