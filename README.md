@@ -186,14 +186,16 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 ### Therapists
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
-| GET | `/api/v1/therapists` | List therapists | Public |
+| GET | `/api/v1/therapists` | List therapists (verified/APPROVED only) | Public |
 | GET | `/api/v1/therapists/me` | My therapist profile | Therapist |
 | GET | `/api/v1/therapists/me/dashboard` | Therapist dashboard stats | Therapist |
 | POST | `/api/v1/therapists` | Create therapist profile | Therapist |
-| GET | `/api/v1/therapists/{id}` | Get therapist by ID | Public |
+| GET | `/api/v1/therapists/{id}` | Get therapist by ID (unverified hidden — 404 unless owner/Admin) | Public* |
 | PUT | `/api/v1/therapists/{id}` | Update therapist profile | Owner/Admin |
 | DELETE | `/api/v1/therapists/{id}` | Delete therapist | Owner/Admin |
 | GET | `/api/v1/therapists/{id}/slots` | Get therapist slots | Authenticated |
+
+\* Public listings surface **verified therapists only**: the list filters on `user.status == APPROVED` (excludes under-review/suspended), and fetching an unverified therapist by ID returns 404 unless the caller is the owner or an Admin.
 
 ### Sessions (Bookings)
 | Method | Endpoint | Description | Access |

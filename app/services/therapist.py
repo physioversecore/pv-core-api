@@ -13,8 +13,13 @@ async def get_therapists(
     city: str | None = None,
     specialty: str | None = None,
     gender: str | None = None,
+    include_unapproved: bool = False,
 ):
     where = {}
+    if not include_unapproved:
+        # Public listings only surface verified therapists — exclude
+        # under-review (PENDING) and suspended/rejected accounts.
+        where["user"] = {"status": "APPROVED"}
     if search:
         where["OR"] = [
             {"name": {"contains": search, "mode": "insensitive"}},

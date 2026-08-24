@@ -107,6 +107,35 @@ async def get_current_user_lenient(
     return user
 
 
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        HTTPBearer(auto_error=False)
+    ),
+    db: Prisma = Depends(get_db),
+):
+    """Like get_current_user but returns None instead of 401 when no/invalid
+    token is provided. Used by public endpoints that customize their response
+    for authenticated callers (e.g. hiding unapproved therapist profiles)."""
+    if credentials is None:
+        return None
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+        )
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+    except JWTError:
+        return None
+
+    return await db.user.find_unique(where={"id": user_id})
+
+
 async def get_therapist_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Prisma = Depends(get_db),

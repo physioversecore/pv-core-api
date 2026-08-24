@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from .conftest import MOCK_THERAPIST_PROFILE, MOCK_PATIENT
+from .conftest import MOCK_THERAPIST_PROFILE, MOCK_THERAPIST_USER, MOCK_PATIENT
 
 THERAPIST_CREATE_DATA = {
     "name": "Dr. Therapist",
@@ -87,11 +87,24 @@ class TestGetMyProfile:
 class TestGetTherapistById:
     def test_get_by_id_success(self, client, mock_db):
         mock_db.therapist.find_unique.return_value = MOCK_THERAPIST_PROFILE
+        mock_db.user.find_unique.return_value = MOCK_THERAPIST_USER
 
         response = client.get("/api/v1/therapists/therapist-1")
 
         assert response.status_code == 200
         assert response.json()["id"] == "therapist-1"
+
+    def test_get_by_id_hidden_when_unapproved(self, client, mock_db):
+        from types import SimpleNamespace
+
+        mock_db.therapist.find_unique.return_value = MOCK_THERAPIST_PROFILE
+        mock_db.user.find_unique.return_value = SimpleNamespace(
+            id="therapist-user-1", status="PENDING"
+        )
+
+        response = client.get("/api/v1/therapists/therapist-1")
+
+        assert response.status_code == 404
 
     def test_get_by_id_not_found(self, client, mock_db):
         mock_db.therapist.find_unique.return_value = None
