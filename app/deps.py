@@ -39,7 +39,11 @@ async def get_current_user(
     token = credentials.credentials
     try:
         payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         user_id: str = payload.get("sub")
         if user_id is None:
@@ -76,7 +80,11 @@ async def get_current_user_lenient(
     token = credentials.credentials
     try:
         payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         user_id: str = payload.get("sub")
         if user_id is None:
@@ -108,7 +116,11 @@ async def get_therapist_user(
     token = credentials.credentials
     try:
         payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         user_id: str = payload.get("sub")
         if user_id is None:

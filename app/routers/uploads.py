@@ -150,7 +150,13 @@ async def serve_file(
     token: str = Query(...),
 ):
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+        )
         user_id: str | None = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
