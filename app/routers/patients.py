@@ -83,8 +83,15 @@ async def update_profile(
     update_dict = data.model_dump(exclude_unset=True)
     if update_dict.get("dob"):
         update_dict["dob"] = datetime.fromisoformat(update_dict["dob"])
+    condition = update_dict.pop("condition", None)
     profile = await upsert_patient_profile(db, current_user.id, update_dict)
-    user = await db.user.find_unique(where={"id": current_user.id})
+    if condition is not None:
+        # Patient's current condition lives on the User model (shared with onboarding)
+        user = await db.user.update(
+            where={"id": current_user.id}, data={"condition": condition}
+        )
+    else:
+        user = await db.user.find_unique(where={"id": current_user.id})
     return _profile_response(profile, user)
 
 

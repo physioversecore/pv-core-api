@@ -94,6 +94,7 @@ async def get_therapist_profile(db: Prisma, user_id: str):
         "city": therapist.city or "",
         "specialty": therapist.specialty or "General",
         "gender": therapist.gender or "Male",
+        "licenseNumber": therapist.licenseNumber or "",
         "price": therapist.price or 0.0,
         "experience": therapist.experience or 0,
         "bio": therapist.bio or "",
@@ -108,7 +109,7 @@ async def update_therapist_profile(db: Prisma, user_id: str, data: dict):
     therapist_fields = {}
 
     user_field_keys = {"name", "phone", "city", "specialty"}
-    therapist_field_keys = {"name", "city", "specialty", "gender", "price", "experience", "bio", "mediaUrls"}
+    therapist_field_keys = {"name", "city", "specialty", "gender", "price", "experience", "bio", "mediaUrls", "licenseNumber"}
 
     for key, value in data.items():
         if key in user_field_keys and value is not None:

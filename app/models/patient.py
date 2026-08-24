@@ -71,6 +71,7 @@ class PatientProfileUpdate(BaseModel):
     history: str | None = None
     dob: str | None = None
     gender: str | None = None
+    condition: str | None = None
     emergencyName: str | None = None
     emergencyRelation: str | None = None
     emergencyPhone: str | None = None
