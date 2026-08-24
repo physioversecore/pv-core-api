@@ -139,8 +139,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             try:
                 from jose import jwt
 
+                from app.config import settings
+
                 token = auth_header[7:]
-                payload = jwt.decode(token, options={"verify_signature": False})
+                payload = jwt.decode(
+                    token,
+                    "",
+                    algorithms=[settings.algorithm],
+                    # Only the `sub` claim is wanted, for the bucket key — the
+                    # request is authenticated elsewhere. `key` is positional
+                    # even when the signature is not checked, and `verify_aud`
+                    # must be off or the aud claim rejects the token here.
+                    options={"verify_signature": False, "verify_aud": False},
+                )
                 user_id = payload.get("sub")
                 if user_id:
                     return f"user:{user_id}"

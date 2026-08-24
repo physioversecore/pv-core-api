@@ -57,6 +57,26 @@ def create_access_token(user_id: str, role: str | None = None) -> str:
     )
 
 
+def decode_access_token(token: str, *, verify_exp: bool = True) -> dict:
+    """Decode and validate an access token issued by create_access_token.
+
+    Kept next to create_access_token on purpose: the two must agree on which
+    claims are present. python-jose rejects a token carrying `aud` unless the
+    expected audience is passed in, so a decode that omits it fails every token
+    this module issues.
+
+    Raises JWTError, exactly like jwt.decode, so existing handlers are unchanged.
+    """
+    return jwt.decode(
+        token,
+        settings.secret_key,
+        algorithms=[settings.algorithm],
+        audience=settings.jwt_audience,
+        issuer=settings.jwt_issuer,
+        options={"verify_exp": verify_exp},
+    )
+
+
 async def create_user(db: Prisma, data: dict) -> dict:
     data["password"] = hash_password(data["password"])
     user = await db.user.create(data=data)

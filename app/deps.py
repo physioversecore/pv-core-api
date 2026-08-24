@@ -6,6 +6,7 @@ from jose import JWTError, jwt
 from prisma import Prisma
 
 from app import get_db, settings
+from app.services.auth import decode_access_token
 
 
 class PaginationParams(TypedDict):
@@ -38,9 +39,7 @@ async def get_current_user(
 ):
     token = credentials.credentials
     try:
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = decode_access_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(
@@ -75,9 +74,7 @@ async def get_current_user_lenient(
     Used for /auth/me so the auth context can load the user during onboarding."""
     token = credentials.credentials
     try:
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = decode_access_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(
@@ -107,9 +104,7 @@ async def get_therapist_user(
     so they can complete their onboarding application."""
     token = credentials.credentials
     try:
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = decode_access_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(

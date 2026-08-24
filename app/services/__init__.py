@@ -1,6 +1,7 @@
 from app.services.auth import (
     authenticate_user,
     create_access_token,
+    decode_access_token,
     create_therapist_signup,
     create_user,
     generate_temp_password,

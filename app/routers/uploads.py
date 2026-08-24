@@ -7,6 +7,7 @@ from prisma import Prisma
 from prisma.enums import Role
 
 from app import get_current_user, get_db, settings
+from app.services.auth import decode_access_token
 from app.database import db
 from jose import JWTError, jwt
 
@@ -150,7 +151,7 @@ async def serve_file(
     token: str = Query(...),
 ):
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = decode_access_token(token)
         user_id: str | None = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")

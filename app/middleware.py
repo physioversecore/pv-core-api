@@ -35,11 +35,10 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
                 try:
-                    from jose import jwt
-                    from app.config import settings
-
                     token = auth_header[7:]
-                    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm], options={"verify_exp": False})
+                    from app.services.auth import decode_access_token
+
+                    payload = decode_access_token(token, verify_exp=False)
                     user_id = payload.get("sub", "")
                 except Exception:
                     pass

@@ -177,6 +177,7 @@ from app.services import (
     bulk_update_slots,
     clear_cart,
     create_access_token,
+    decode_access_token,
     create_audit_entry,
     create_block_request,
     create_payment,
