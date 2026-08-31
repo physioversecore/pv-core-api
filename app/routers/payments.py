@@ -39,19 +39,23 @@ async def process_booking_payment(
     if current_user.role != Role.PATIENT:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    session = await create_session(
-        db,
-        {
-            "therapistId": data.therapistId,
-            "patientId": current_user.id,
-            "date": data.date,
-            "time": data.time,
-            "type": data.type.upper(),
-            "address": data.address,
-            "fee": data.fee,
-            "notes": data.notes,
-        },
-    )
+    try:
+        session = await create_session(
+            db,
+            {
+                "therapistId": data.therapistId,
+                "patientId": current_user.id,
+                "date": data.date,
+                "time": data.time,
+                "type": data.type.upper(),
+                "address": data.address,
+                "fee": data.fee,
+                "familyMemberId": data.familyMemberId,
+                "notes": data.notes,
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     payment = await create_payment(
         db,

@@ -127,6 +127,8 @@ model FamilyMember {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  sessions Session[]
+
   @@index([patientId])
 }
 
@@ -213,20 +215,22 @@ model Product {
 }
 
 model Session {
-  id          String        @id @default(cuid())
-  therapistId String
-  therapist   Therapist     @relation(fields: [therapistId], references: [id], onDelete: Cascade)
-  patientId   String
-  patient     User          @relation("PatientSessions", fields: [patientId], references: [id], onDelete: Cascade)
-  date        DateTime
-  time        String
-  type        SessionType   @default(HOME_VISIT)
-  status      SessionStatus @default(SCHEDULED)
-  address     String
-  fee         Float
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  therapistId     String
+  therapist       Therapist     @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         User          @relation("PatientSessions", fields: [patientId], references: [id], onDelete: Cascade)
+  familyMemberId  String?
+  familyMember    FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+  date            DateTime
+  time            String
+  type            SessionType   @default(HOME_VISIT)
+  status          SessionStatus @default(SCHEDULED)
+  address         String
+  fee             Float
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   review Review?
 

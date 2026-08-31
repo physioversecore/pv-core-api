@@ -12,6 +12,9 @@ def _enrich_session(s):
         patient = getattr(s, "patient", None)
         d["patientName"] = patient.name if patient and patient.name else ""
         d["patientPhone"] = patient.phone if patient and patient.phone else ""
+        member = getattr(s, "familyMember", None)
+        d["familyMemberId"] = getattr(s, "familyMemberId", None)
+        d["familyMemberName"] = member.name if member and member.name else None
         return d
     except Exception:
         return {"id": getattr(s, "id", ""), "therapistName": "", "patientName": "", "patientPhone": ""}
@@ -21,8 +24,40 @@ def _enrich_sessions(sessions: list):
     return [_enrich_session(s) for s in sessions]
 
 
+async def validate_family_member(db: Prisma, user_id: str, family_member_id: str | None):
+    """Validate that a family member belongs to the given patient. Returns the member or None."""
+    if not family_member_id:
+        return None
+    profile = await db.patientprofile.find_unique(where={"userId": user_id})
+    if not profile:
+        return None
+    member = await db.familymember.find_unique(where={"id": family_member_id})
+    if not member or member.patientId != profile.id:
+        return None
+    return member
+
+
 async def create_session(db: Prisma, data: dict):
-    session = await db.session.create(data=data, include={"therapist": True})
+    family_member = await validate_family_member(
+        db, data.get("patientId"), data.get("familyMemberId")
+    )
+    if data.get("familyMemberId") and not family_member:
+        raise ValueError("Invalid family member")
+    create_data = {
+        "therapistId": data["therapistId"],
+        "patientId": data["patientId"],
+        "date": data["date"],
+        "time": data["time"],
+        "type": data.get("type", "HOME_VISIT"),
+        "address": data["address"],
+        "fee": data["fee"],
+        "notes": data.get("notes"),
+    }
+    if family_member:
+        create_data["familyMemberId"] = family_member.id
+    session = await db.session.create(
+        data=create_data, include={"therapist": True, "familyMember": True}
+    )
     return _enrich_session(session)
 
 
@@ -32,7 +67,7 @@ async def get_sessions_for_patient(db: Prisma, patient_id: str, skip=0, limit=10
         skip=skip,
         take=limit,
         order={"createdAt": "desc"},
-        include={"therapist": True},
+        include={"therapist": True, "familyMember": True},
     )
     total = await db.session.count(where={"patientId": patient_id})
     return _enrich_sessions(sessions), total
@@ -44,7 +79,7 @@ async def get_sessions_for_therapist(db: Prisma, therapist_id: str, skip=0, limi
         skip=skip,
         take=limit,
         order={"date": "asc"},
-        include={"therapist": True, "patient": True},
+        include={"therapist": True, "patient": True, "familyMember": True},
     )
     total = await db.session.count(where={"therapistId": therapist_id})
     return _enrich_sessions(sessions), total
@@ -53,19 +88,19 @@ async def get_sessions_for_therapist(db: Prisma, therapist_id: str, skip=0, limi
 async def get_all_sessions(db: Prisma, skip=0, limit=100):
     sessions = await db.session.find_many(
         skip=skip, take=limit, order={"createdAt": "desc"},
-        include={"therapist": True},
+        include={"therapist": True, "familyMember": True},
     )
     total = await db.session.count()
     return _enrich_sessions(sessions), total
 
 
 async def get_session(db: Prisma, session_id: str):
-    session = await db.session.find_unique(where={"id": session_id}, include={"therapist": True})
+    session = await db.session.find_unique(where={"id": session_id}, include={"therapist": True, "familyMember": True})
     return _enrich_session(session) if session else None
 
 
 async def update_session(db: Prisma, session_id: str, data: dict):
-    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True, "patient": True})
+    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True, "patient": True, "familyMember": True})
     return _enrich_session(session)
 
 
@@ -79,7 +114,7 @@ async def reschedule_session(
     from datetime import datetime as dt
 
     session = await db.session.find_unique(
-        where={"id": session_id}, include={"therapist": True}
+        where={"id": session_id}, include={"therapist": True, "familyMember": True}
     )
     if not session:
         return None, "Session not found"
@@ -116,6 +151,6 @@ async def reschedule_session(
     updated = await db.session.update(
         where={"id": session_id},
         data={"date": dt.strptime(new_date, "%Y-%m-%d"), "time": new_time},
-        include={"therapist": True, "patient": True},
+        include={"therapist": True, "patient": True, "familyMember": True},
     )
     return _enrich_session(updated), None

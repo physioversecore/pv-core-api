@@ -9,6 +9,7 @@ class SessionCreate(BaseModel):
     type: str = Field(default="HOME_VISIT", max_length=32)
     address: str = Field(min_length=1, max_length=500)
     fee: float = Field(ge=0, le=1000000)
+    familyMemberId: str | None = Field(default=None, max_length=64)
     notes: str | None = Field(default=None, max_length=2000)
 
 
@@ -26,6 +27,8 @@ class SessionResponse(BaseModel):
     patientId: str
     patientName: str = ""
     patientPhone: str = ""
+    familyMemberId: str | None = None
+    familyMemberName: str | None = None
     date: datetime
     time: str
     type: str
