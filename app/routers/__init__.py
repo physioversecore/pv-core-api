@@ -18,3 +18,4 @@ from app.routers.patients import router as patients_router
 from app.routers.clinics import router as clinics_router
 from app.routers.packages import router as packages_router
 from app.routers.notifications import router as notifications_router
+from app.routers.points import router as points_router

@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
 from app import (
+    reverse_for_session,
+    create_notification,
+    award_referral_for_session,
     PaginationParams,
     RescheduleRequest,
     SessionCreate,
@@ -126,6 +129,7 @@ async def get_session_by_id(
 async def update_session_by_id(
     session_id: str,
     data: SessionUpdate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
@@ -138,10 +142,40 @@ async def update_session_by_id(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     elif session.patientId != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    previous_status = session.status
     updated = await update_session(
         db, session_id, data.model_dump(exclude_none=True)
     )
+
+    # Referral points pay out on a *completed* session, not a booked one --
+    # book-then-cancel would otherwise be free money. Only on the transition,
+    # so re-saving a completed session cannot pay twice (the ledger's
+    # idempotency key is the backstop).
+    new_status = getattr(updated, "status", None) or data.status
+    if new_status == "COMPLETED" and previous_status != "COMPLETED":
+        awarded = await award_referral_for_session(db, session)
+        for user_id, row in awarded:
+            background_tasks.add_task(
+                _notify_referral_award, db, user_id, row.delta
+            )
+    elif new_status == "CANCELLED" and previous_status == "COMPLETED":
+        # A completed session that is later cancelled or refunded takes its
+        # award with it.
+        await reverse_for_session(db, session_id, "Session cancelled after completion")
+
     return SessionResponse.model_validate(updated)
+
+
+async def _notify_referral_award(db: Prisma, user_id: str, points: int):
+    await create_notification(
+        db,
+        user_id,
+        type="REFERRAL_REWARDED",
+        title="You earned {} points".format(points),
+        body="Your referral completed their first session. Points become "
+        "available after a short hold.",
+        ref_type="REFERRAL",
+    )
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

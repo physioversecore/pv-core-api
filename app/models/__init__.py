@@ -54,6 +54,18 @@ from app.models.payment import (
     PaymentResponse,
     SessionPaymentResponse,
 )
+from app.models.points import (
+    ApplyPointsRequest,
+    ApplyPointsResponse,
+    PointBalanceResponse,
+    PointGrantRequest,
+    PointGrantResponse,
+    PointTransactionListResponse,
+    PointTransactionResponse,
+    PointsConfig,
+    ReferralEntry,
+    ReferralSummaryResponse,
+)
 from app.models.notification import (
     NotificationCreate,
     NotificationListResponse,

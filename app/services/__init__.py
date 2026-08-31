@@ -51,6 +51,17 @@ from app.services.payment import (
     get_payments_for_user,
     update_payment,
 )
+from app.services.points import (
+    award_referral_for_session,
+    get_balance,
+    get_config,
+    grant,
+    list_transactions,
+    mature_pending,
+    redeem,
+    reverse_for_session,
+    save_config,
+)
 from app.services.notification import (
     create_notification,
     list_notifications,

@@ -16,6 +16,8 @@ class SignupRequest(BaseModel):
     city: str | None = None
     phone: str | None = None
     specialty: str | None = None
+    # Code the new user typed, or that arrived on a referral link.
+    referralCode: str | None = Field(default=None, max_length=32)
     gender: str | None = None
     license: str | None = None
     experience: int | None = None
