@@ -41,8 +41,8 @@ class SlotInfo(BaseModel):
     date: str
     time: str
     status: str
-    patientName: str = ""
-    patientPhone: str = ""
+    patientName: str | None = None
+    patientPhone: str | None = None
     sessionType: str = ""
     fee: float | None = None
     sessionId: str | None = None
