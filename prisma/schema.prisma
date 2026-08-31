@@ -79,6 +79,7 @@ model User {
   cartItems   CartItem[]
   payments    Payment[]
   refunds     Refund[]     @relation("PatientRefunds")
+  notifications Notification[]
 
   @@index([role])
   @@index([status])
@@ -316,6 +317,29 @@ model CartItem {
   updatedAt  DateTime     @updatedAt
 
   @@index([userId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Machine key the client switches on, e.g. SESSION_BOOKED, REFERRAL_REWARDED.
+  type      String
+  title     String
+  body      String
+
+  /// Null until read. Nullable rather than a bool so "when" is recoverable.
+  readAt    DateTime?
+
+  /// What the notification points at, so the client can deep-link.
+  refType   String?
+  refId     String?
+
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 model Setting {
