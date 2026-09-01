@@ -17,6 +17,7 @@ from app import (
     get_current_user,
     get_db,
     get_or_404,
+    get_therapist,
     get_therapist_by_user,
     get_therapist_dashboard,
     get_therapist_profile,
@@ -141,7 +142,11 @@ async def get_therapist_by_id(
     requester=Depends(get_optional_user),
     db: Prisma = Depends(get_db),
 ):
-    therapist = await get_or_404(db, "therapist", therapist_id)
+    # Not get_or_404: the profile has to carry the clinic, which an
+    # INFO_ONLY therapist is rendered from.
+    therapist = await get_therapist(db, therapist_id)
+    if not therapist:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     owner = await db.user.find_unique(where={"id": therapist.userId})
     if not owner or owner.status != "APPROVED":
         # Unverified (under review / suspended / rejected) profiles are hidden
