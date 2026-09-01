@@ -35,6 +35,7 @@ from app.models import (
     CartItemUpdate,
     CartResponse,
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ClinicCreate,
     ClinicListResponse,
     ClinicResponse,
