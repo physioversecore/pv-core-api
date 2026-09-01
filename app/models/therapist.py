@@ -61,6 +61,11 @@ class TherapistProfileResponse(BaseModel):
     photo: str | None = None
     documents: list[TherapistDocument] | None = None
 
+    listingType: str = "BOOKABLE"
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
     class Config:
         from_attributes = True
 
@@ -76,6 +81,12 @@ class TherapistProfileUpdate(BaseModel):
     experience: int | None = None
     bio: str | None = None
     mediaUrls: str | None = None
+
+    # A therapist describes their own reach. Listing type and clinic are not
+    # here on purpose -- those stay with admins.
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
 
 
 class ClinicBrief(BaseModel):

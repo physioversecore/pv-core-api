@@ -106,6 +106,10 @@ async def get_therapist_profile(db: Prisma, user_id: str):
         "mediaUrls": therapist.mediaUrls,
         "photo": (therapist.mediaUrls or "").split(",")[0].strip() or None,
         "documents": documents,
+        "listingType": therapist.listingType or "BOOKABLE",
+        "latitude": therapist.latitude,
+        "longitude": therapist.longitude,
+        "serviceRadiusKm": therapist.serviceRadiusKm,
     }
 
 
@@ -114,7 +118,13 @@ async def update_therapist_profile(db: Prisma, user_id: str, data: dict):
     therapist_fields = {}
 
     user_field_keys = {"name", "phone", "city", "specialty"}
-    therapist_field_keys = {"name", "city", "specialty", "gender", "price", "experience", "bio", "mediaUrls", "licenseNumber"}
+    therapist_field_keys = {
+        "name", "city", "specialty", "gender", "price", "experience", "bio",
+        "mediaUrls", "licenseNumber",
+        # Own coverage. listingType and clinicId are deliberately absent --
+        # a therapist must not be able to opt themselves out of bookings.
+        "latitude", "longitude", "serviceRadiusKm",
+    }
 
     for key, value in data.items():
         if key in user_field_keys and value is not None:
