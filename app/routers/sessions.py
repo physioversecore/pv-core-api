@@ -53,6 +53,11 @@ async def book_session(
             },
         )
     except ValueError as e:
+        if str(e) == "CONFLICT":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That time slot was just booked — please choose another.",
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return SessionResponse.model_validate(session)
 

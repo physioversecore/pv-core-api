@@ -37,12 +37,45 @@ async def validate_family_member(db: Prisma, user_id: str, family_member_id: str
     return member
 
 
+async def is_slot_booked(
+    db: Prisma,
+    therapist_id: str,
+    date_obj,
+    time_str: str,
+    exclude_session_id: str | None = None,
+) -> bool:
+    """Return True if the therapist/date/time slot is already occupied by an
+    active (scheduled or in-progress) session. Used to prevent two patients
+    booking the same time slot of the same therapist."""
+    from datetime import datetime as dt
+
+    if isinstance(date_obj, str):
+        try:
+            date_obj = dt.fromisoformat(date_obj)
+        except ValueError:
+            date_obj = dt.strptime(date_obj, "%Y-%m-%d")
+    day_start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+    where: dict = {
+        "therapistId": therapist_id,
+        "date": {"gte": day_start, "lte": day_end},
+        "time": time_str,
+        "status": {"in": ["SCHEDULED", "IN_PROGRESS"]},
+    }
+    if exclude_session_id:
+        where["id"] = {"not": exclude_session_id}
+    existing = await db.session.find_many(where=where, select={"id": True})
+    return len(existing) > 0
+
+
 async def create_session(db: Prisma, data: dict):
     family_member = await validate_family_member(
         db, data.get("patientId"), data.get("familyMemberId")
     )
     if data.get("familyMemberId") and not family_member:
         raise ValueError("Invalid family member")
+    if await is_slot_booked(db, data["therapistId"], data["date"], data["time"]):
+        raise ValueError("CONFLICT")
     create_data = {
         "therapistId": data["therapistId"],
         "patientId": data["patientId"],

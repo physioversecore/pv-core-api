@@ -241,6 +241,7 @@ model Session {
   @@index([patientId, status])
   @@index([therapistId, status])
   @@index([therapistId, date])
+  @@unique([therapistId, date, time])
 }
 
 model Review {
