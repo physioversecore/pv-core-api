@@ -188,11 +188,31 @@ async def update_therapist_profile(
     db: Prisma = Depends(get_db),
 ):
     therapist = await get_or_404(db, "therapist", therapist_id)
-    if therapist.userId != current_user.id and current_user.role != Role.ADMIN:
+    is_admin = current_user.role == Role.ADMIN
+    if therapist.userId != current_user.id and not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    updated = await update_therapist(
-        db, therapist_id, data.model_dump(exclude_none=True)
-    )
+
+    payload = data.model_dump(exclude_none=True)
+
+    # Listing type and clinic decide whether someone can be booked at all, so
+    # they stay with admins. A therapist setting their own would let them opt
+    # out of the booking flow, or claim a workplace they are not part of.
+    restricted = {"listingType", "clinicId"} & payload.keys()
+    if restricted and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Only an admin may change: {', '.join(sorted(restricted))}",
+        )
+    if "listingType" in payload and payload["listingType"] not in (
+        "BOOKABLE",
+        "INFO_ONLY",
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="listingType must be BOOKABLE or INFO_ONLY",
+        )
+
+    updated = await update_therapist(db, therapist_id, payload)
     return TherapistResponse.model_validate(updated)
 
 

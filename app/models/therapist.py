@@ -21,6 +21,18 @@ class TherapistUpdate(BaseModel):
     experience: int | None = None
     bio: str | None = None
 
+    # Where the therapist works from and how far they travel. Theirs to set:
+    # it describes their own availability, not their standing on the platform.
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
+    # Admin-only, enforced in the router. Whether a therapist is bookable and
+    # which clinic they are listed under is the platform's call, not a claim
+    # a therapist may make about themselves.
+    listingType: str | None = None
+    clinicId: str | None = None
+
 
 class TherapistDocument(BaseModel):
     id: str
