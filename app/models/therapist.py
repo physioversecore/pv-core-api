@@ -66,6 +66,28 @@ class TherapistProfileUpdate(BaseModel):
     mediaUrls: str | None = None
 
 
+class ClinicBrief(BaseModel):
+    """Workplace details for an information-only therapist.
+
+    Resolved through the linked clinic rather than duplicated onto the
+    therapist, so hours, services and address have one source of truth.
+    """
+
+    id: str
+    name: str
+    area: str = ""
+    city: str = ""
+    address: str = ""
+    phone: str = ""
+    hours: str = ""
+    services: list[str] = []
+    latitude: float | None = None
+    longitude: float | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class TherapistResponse(BaseModel):
     id: str
     userId: str
@@ -78,6 +100,17 @@ class TherapistResponse(BaseModel):
     price: float
     experience: int
     bio: str
+
+    # BOOKABLE therapists expose slots and can be booked. INFO_ONLY ones are
+    # directory entries visited at their workplace.
+    listingType: str = "BOOKABLE"
+    clinic: ClinicBrief | None = None
+
+    # Home-visit coverage, for the map. Null until geocoded.
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
     createdAt: datetime
     updatedAt: datetime
 

@@ -51,6 +51,12 @@ from app.services.payment import (
     get_payments_for_user,
     update_payment,
 )
+from app.services.coverage import (
+    clinics_in_area,
+    haversine_km,
+    list_service_areas,
+    therapists_covering,
+)
 from app.services.points import (
     award_referral_for_session,
     get_balance,

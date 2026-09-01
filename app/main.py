@@ -30,6 +30,7 @@ from app.routers import (
     packages_router,
     notifications_router,
     points_router,
+    coverage_router,
     patients_router,
     payments_router,
     products_router,
@@ -145,6 +146,7 @@ app.include_router(clinics_router, prefix="/api/v1")
 app.include_router(packages_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(points_router, prefix="/api/v1")
+app.include_router(coverage_router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -39,13 +39,18 @@ async def get_therapists(
         skip=skip,
         take=limit,
         order={"createdAt": "desc"},
+        # An INFO_ONLY therapist is rendered from their workplace, so the
+        # clinic comes back with the listing rather than in a second call.
+        include={"clinic": True},
     )
     total = await db.therapist.count(where=where)
     return therapists, total
 
 
 async def get_therapist(db: Prisma, therapist_id: str):
-    return await db.therapist.find_unique(where={"id": therapist_id})
+    return await db.therapist.find_unique(
+        where={"id": therapist_id}, include={"clinic": True}
+    )
 
 
 async def get_therapist_by_user(db: Prisma, user_id: str):
