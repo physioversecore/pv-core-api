@@ -363,6 +363,38 @@ class TestChangePassword:
         assert "incorrect" in response.text
 
 
+class TestDeleteAccount:
+    @patch("app.routers.auth.verify_password", return_value=True)
+    def test_delete_account_success(self, mock_verify, patient_client, mock_db):
+        mock_db.user.delete.return_value = MOCK_PATIENT
+
+        response = patient_client.post("/api/v1/auth/delete-account", json={"password": "secret123"})
+
+        assert response.status_code == 204
+        mock_db.user.delete.assert_awaited_once_with(where={"id": MOCK_PATIENT.id})
+
+    def test_delete_account_without_password(self, patient_client, mock_db):
+        mock_db.user.delete.return_value = MOCK_PATIENT
+
+        response = patient_client.post("/api/v1/auth/delete-account", json={})
+
+        assert response.status_code == 204
+        mock_db.user.delete.assert_awaited_once_with(where={"id": MOCK_PATIENT.id})
+
+    @patch("app.routers.auth.verify_password", return_value=False)
+    def test_delete_account_wrong_password(self, mock_verify, patient_client):
+        response = patient_client.post(
+            "/api/v1/auth/delete-account", json={"password": "wrongpass"}
+        )
+
+        assert response.status_code == 400
+        assert "incorrect" in response.text
+
+    def test_delete_account_requires_auth(self, client):
+        response = client.post("/api/v1/auth/delete-account", json={"password": "x"})
+        assert response.status_code in (401, 403)
+
+
 class TestLogout:
     def test_logout(self, client):
         response = client.post("/api/v1/auth/logout")

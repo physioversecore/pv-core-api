@@ -63,6 +63,10 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str | None = None
+
+
 class SendOtpRequest(BaseModel):
     email: EmailStr
     name: str = ""

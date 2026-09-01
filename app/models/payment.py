@@ -49,6 +49,7 @@ class BookingPaymentRequest(BaseModel):
     address: str = Field(min_length=1, max_length=500)
     fee: float = Field(ge=0, le=1000000)
     notes: str | None = Field(default=None, max_length=2000)
+    familyMemberId: str | None = Field(default=None, max_length=64)
     currency: str = Field(default="NPR", max_length=8)
     paymentMethod: str = Field(default="CASH", max_length=32)
     paymentType: str | None = Field(default=None, max_length=32)
@@ -66,6 +67,8 @@ class SessionPaymentResponse(BaseModel):
     patientId: str
     patientName: str = ""
     patientPhone: str = ""
+    familyMemberId: str | None = None
+    familyMemberName: str | None = None
     date: datetime
     time: str
     type: str

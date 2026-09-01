@@ -39,7 +39,14 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
                     from app.config import settings
 
                     token = auth_header[7:]
-                    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm], options={"verify_exp": False})
+                    payload = jwt.decode(
+                        token,
+                        settings.secret_key,
+                        algorithms=[settings.algorithm],
+                        issuer=settings.jwt_issuer,
+                        audience=settings.jwt_audience,
+                        options={"verify_exp": False},
+                    )
                     user_id = payload.get("sub", "")
                 except Exception:
                     pass

@@ -4,7 +4,6 @@ venv/
 virtual-env/
 
 #Agents md files
-AGENTS.md
 CLAUDE.md
 
 # Environment

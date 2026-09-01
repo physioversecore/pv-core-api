@@ -5,6 +5,32 @@ PAYMENT_CREATE_DATA = {
     "method": "CASH",
 }
 
+BOOKING_PROCESS_DATA = {
+    "therapistId": "therapist-1",
+    "date": "2024-07-01T10:00:00",
+    "time": "10:00",
+    "type": "HOME_VISIT",
+    "address": "Test Address",
+    "fee": 1500.0,
+    "currency": "NPR",
+    "paymentMethod": "CASH",
+    "platformFee": 75.0,
+}
+
+
+class TestProcessBooking:
+    def test_process_conflict_returns_409(self, patient_client, mock_db):
+        mock_db.familymember.find_unique.return_value = None
+        mock_db.session.find_many.return_value = [MOCK_PAYMENT]
+
+        response = patient_client.post(
+            "/api/v1/payments/process", json=BOOKING_PROCESS_DATA
+        )
+
+        assert response.status_code == 409
+        assert "booked" in response.json()["detail"].lower()
+        mock_db.session.create.assert_not_awaited()
+
 
 class TestCreatePayment:
     def test_create_payment(self, patient_client, mock_db):

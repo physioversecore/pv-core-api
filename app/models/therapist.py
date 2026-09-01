@@ -41,6 +41,7 @@ class TherapistProfileResponse(BaseModel):
     city: str
     specialty: str
     gender: str
+    licenseNumber: str | None = None
     price: float
     experience: int
     bio: str
@@ -58,6 +59,7 @@ class TherapistProfileUpdate(BaseModel):
     city: str | None = None
     specialty: str | None = None
     gender: str | None = None
+    licenseNumber: str | None = None
     price: float | None = None
     experience: int | None = None
     bio: str | None = None

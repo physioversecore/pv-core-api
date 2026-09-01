@@ -5,6 +5,7 @@ from prisma.enums import Role
 
 from app import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     GoogleAuthRequest,
     LoginRequest,
@@ -344,6 +345,21 @@ async def change_password(
         current_user.id,
         {"password": hash_password(data.new_password), "mustChangePassword": False},
     )
+
+
+@router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    data: DeleteAccountRequest,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if data.password:
+        if not verify_password(data.password, current_user.password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect",
+            )
+    await db.user.delete(where={"id": current_user.id})
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

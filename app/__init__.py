@@ -1,6 +1,6 @@
 from app.config import settings
 from app.database import db, get_db
-from app.deps import PaginationParams, get_admin_user, get_current_user, get_current_user_lenient, get_or_404, get_therapist_user, pagination_params
+from app.deps import PaginationParams, get_admin_user, get_current_user, get_current_user_lenient, get_optional_user, get_or_404, get_therapist_user, pagination_params
 
 from app.models import (
     AdminDashboardStats,
@@ -35,6 +35,7 @@ from app.models import (
     CartItemUpdate,
     CartResponse,
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ClinicCreate,
     ClinicListResponse,
     ClinicResponse,

@@ -22,6 +22,7 @@ from app import (
     get_therapist_profile,
     get_therapists,
     get_slots_for_range,
+    get_optional_user,
     pagination_params,
     update_therapist,
     update_therapist_profile as update_therapist_profile_svc,
@@ -137,9 +138,18 @@ async def get_therapist_slots(
 @router.get("/{therapist_id}", response_model=TherapistResponse)
 async def get_therapist_by_id(
     therapist_id: str,
+    requester=Depends(get_optional_user),
     db: Prisma = Depends(get_db),
 ):
     therapist = await get_or_404(db, "therapist", therapist_id)
+    owner = await db.user.find_unique(where={"id": therapist.userId})
+    if not owner or owner.status != "APPROVED":
+        # Unverified (under review / suspended / rejected) profiles are hidden
+        # from the public — only the owner and admins can fetch them.
+        is_owner = requester is not None and requester.id == therapist.userId
+        is_admin = requester is not None and requester.role == Role.ADMIN
+        if not (is_owner or is_admin):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return TherapistResponse.model_validate(therapist)
 
 
