@@ -67,6 +67,7 @@ model User {
   specialty     String?
   status        UserStatus @default(PENDING)
   mustChangePassword Boolean @default(false)
+  tokenVersion  Int       @default(0)
   referralCode  String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -166,6 +167,7 @@ model Therapist {
   availabilityBlocks AvailabilityBlock[]
   auditLogEntries  AuditLogEntry[]
   blockRequests ScheduleBlockRequest[]
+  rateChangeRequests RateChangeRequest[]
   serviceAreas TherapistServiceArea[]
   verifications Verification[]
   applicationFeedbacks TherapistApplicationFeedback[]
@@ -391,6 +393,23 @@ model ScheduleBlockRequest {
   partsOfDay  Json
   reason      String
   notify      Boolean  @default(true)
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  adminNotes  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([therapistId])
+  @@index([status])
+  @@index([therapistId, status])
+}
+
+model RateChangeRequest {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  rateFrom    Float
+  rateTo      Float
+  reason      String
   status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
   adminNotes  String?
   createdAt   DateTime @default(now())

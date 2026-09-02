@@ -67,6 +67,7 @@ MOCK_PATIENT = SimpleNamespace(
     specialty=None,
     status="APPROVED",
     referralCode="SAHA-TEST1234",
+    tokenVersion=0,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -82,6 +83,7 @@ MOCK_THERAPIST_USER = SimpleNamespace(
     specialty="Physiotherapy",
     status="APPROVED",
     referralCode=None,
+    tokenVersion=0,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -97,6 +99,7 @@ MOCK_ADMIN = SimpleNamespace(
     specialty=None,
     status="APPROVED",
     referralCode=None,
+    tokenVersion=0,
     createdAt=NOW,
     updatedAt=NOW,
 )

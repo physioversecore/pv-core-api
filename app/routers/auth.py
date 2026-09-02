@@ -17,6 +17,7 @@ from app import (
     UserUpdate,
     VerifyOtpRequest,
     authenticate_user,
+    bump_token_version,
     create_access_token,
     create_therapist_signup,
     create_user,
@@ -139,7 +140,9 @@ async def login_with_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db)):
             detail=detail,
         )
 
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),
@@ -219,13 +222,17 @@ async def signup(
     # normal pages, but they need a token to complete onboarding.
     if role_val == "THERAPIST":
         background_tasks.add_task(send_application_received_email, user.email, user.name)
-        token = create_access_token(user.id, role=user.role)
+        token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
         return TokenResponse(
             access_token=token,
             user=await _user_with_photo(db, user),
         )
 
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
 
     return TokenResponse(
         access_token=token,
@@ -251,7 +258,9 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
         )
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),
@@ -367,6 +376,15 @@ async def logout():
     return None
 
 
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all_devices(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    await bump_token_version(db, current_user.id)
+    return None
+
+
 @router.post("/google", response_model=TokenResponse)
 async def google_auth(
     data: GoogleAuthRequest,
@@ -399,7 +417,9 @@ async def google_auth(
             detail=detail,
         )
 
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),

@@ -162,3 +162,8 @@ from app.models.package import (
     PackageResponse,
     PackageUpdate,
 )
+from app.models.rate_change import (
+    RateChangeListResponse,
+    RateChangeRequestCreate,
+    RateChangeRequestResponse,
+)

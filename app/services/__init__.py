@@ -1,5 +1,6 @@
 from app.services.auth import (
     authenticate_user,
+    bump_token_version,
     create_access_token,
     create_therapist_signup,
     create_user,
@@ -181,4 +182,11 @@ from app.services.therapist_application import (
     get_application_sections,
     get_application_status,
     update_therapist_application,
+)
+from app.services.rate_change import (
+    approve_rate_change,
+    create_rate_change,
+    get_rate_changes_for_admin,
+    get_therapist_rate_changes,
+    reject_rate_change,
 )
