@@ -39,6 +39,7 @@ from app.routers import (
     therapist_application_router,
     therapists_router,
     uploads_router,
+    rate_change_router,
 )
 
 _limiter = None
@@ -141,6 +142,7 @@ app.include_router(availability_router, prefix="/api/v1")
 app.include_router(service_router, prefix="/api/v1")
 app.include_router(clinics_router, prefix="/api/v1")
 app.include_router(packages_router, prefix="/api/v1")
+app.include_router(rate_change_router, prefix="/api/v1")
 
 
 @app.get("/health")

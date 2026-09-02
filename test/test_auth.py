@@ -161,6 +161,7 @@ class TestTherapistSignupApproval:
             specialty="Physiotherapy",
             status="PENDING",
             referralCode=None,
+            tokenVersion=0,
             createdAt=NOW,
             updatedAt=NOW,
         )
@@ -275,6 +276,7 @@ class TestLoginTherapistApprovalGate:
             password="x",
             role="THERAPIST",
             status=status,
+            tokenVersion=0,
         )
 
     @patch("app.routers.auth.authenticate_user")

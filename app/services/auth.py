@@ -38,7 +38,9 @@ async def set_temporary_password(db: Prisma, user_id: str) -> str:
     return temp
 
 
-def create_access_token(user_id: str, role: str | None = None) -> str:
+def create_access_token(
+    user_id: str, role: str | None = None, token_version: int = 0
+) -> str:
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload: dict = {
@@ -47,6 +49,7 @@ def create_access_token(user_id: str, role: str | None = None) -> str:
         "iat": now,
         "iss": settings.jwt_issuer,
         "aud": settings.jwt_audience,
+        "ver": token_version,
     }
     if role:
         payload["role"] = role.lower()
@@ -54,6 +57,18 @@ def create_access_token(user_id: str, role: str | None = None) -> str:
         payload,
         settings.secret_key,
         algorithm=settings.algorithm,
+    )
+
+
+async def bump_token_version(db: Prisma, user_id: str) -> None:
+    """Invalidate every outstanding JWT for a user by incrementing the token
+    version claim. Used by 'log out all devices'."""
+    user = await db.user.find_unique(where={"id": user_id})
+    if user is None:
+        return
+    await db.user.update(
+        where={"id": user_id},
+        data={"tokenVersion": (user.tokenVersion or 0) + 1},
     )
 
 
