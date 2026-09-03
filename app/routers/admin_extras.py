@@ -706,3 +706,23 @@ async def revenue_trend(
             "revenue": round(monthly.get(key, 0), 2),
         })
     return trend
+
+
+# ── Sidebar nav badge counts ──
+
+
+@router.get("/nav-badges")
+async def admin_nav_badges(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    pending_leaves = await db.scheduleblockrequest.count(where={"status": "PENDING"})
+    pending_refunds = await db.refund.count(where={"status": "PENDING"})
+    pending_verifications = await db.user.count(
+        where={"role": "THERAPIST", "status": "PENDING"}
+    )
+    return {
+        "pendingLeaves": pending_leaves,
+        "pendingRefunds": pending_refunds,
+        "pendingVerifications": pending_verifications,
+    }
