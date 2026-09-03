@@ -42,6 +42,7 @@ async def get_admin_therapists(
         where["OR"] = [
             {"name": {"contains": search, "mode": "insensitive"}},
             {"email": {"contains": search, "mode": "insensitive"}},
+            {"phone": {"contains": search, "mode": "insensitive"}},
         ]
 
     if specialty:
@@ -284,6 +285,7 @@ async def get_admin_patients(
         where["OR"] = [
             {"name": {"contains": search, "mode": "insensitive"}},
             {"email": {"contains": search, "mode": "insensitive"}},
+            {"phone": {"contains": search, "mode": "insensitive"}},
         ]
 
     if city:
