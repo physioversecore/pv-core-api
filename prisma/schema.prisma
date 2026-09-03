@@ -80,6 +80,7 @@ model User {
   cartItems   CartItem[]
   payments    Payment[]
   refunds     Refund[]     @relation("PatientRefunds")
+  activityLogs ActivityLog[]
 
   @@index([role])
   @@index([status])
@@ -529,6 +530,8 @@ model ActivityLog {
   targetId   String
   metadata   Json?
   createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
 
   @@index([adminId])
   @@index([targetType, targetId])

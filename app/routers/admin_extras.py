@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
 
 from app import get_admin_user, get_current_user, get_db
+from app.services.activity_log import log_admin_activity
 
 router = APIRouter(prefix="/admin", tags=["Admin Extras"])
 
@@ -111,6 +112,10 @@ async def update_admin_payment(
     if not update_fields:
         return {"id": existing.id, "status": existing.status}
     updated = await db.payment.update(where={"id": payment_id}, data=update_fields)
+    await log_admin_activity(
+        db, _.id, "UPDATE_PAYMENT", "Payment", payment_id,
+        {"status": updated.status, "amount": updated.amount},
+    )
     return {"id": updated.id, "status": updated.status, "amount": updated.amount}
 
 
@@ -315,6 +320,10 @@ async def update_admin_team_member(
     if not update_fields:
         return {"id": existing.id, "name": existing.name, "email": existing.email, "role": existing.role}
     updated = await db.user.update(where={"id": user_id}, data=update_fields)
+    await log_admin_activity(
+        db, _.id, "UPDATE_TEAM", "TeamMember", user_id,
+        {"name": updated.name},
+    )
     return {"id": updated.id, "name": updated.name, "email": updated.email, "role": updated.role}
 
 
@@ -507,6 +516,17 @@ async def update_admin_leave(
     updated = await db.scheduleblockrequest.update(
         where={"id": leave_id},
         data=update_data,
+    )
+    new_status = update_data.get("status")
+    if new_status == "APPROVED":
+        action = "APPROVE_LEAVE"
+    elif new_status == "REJECTED":
+        action = "REJECT_LEAVE"
+    else:
+        action = "UPDATE_LEAVE"
+    await log_admin_activity(
+        db, _.id, action, "LeaveRequest", leave_id,
+        {"status": updated.status},
     )
     return {"id": updated.id, "status": updated.status, "adminNotes": updated.adminNotes}
 
