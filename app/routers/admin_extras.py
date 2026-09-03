@@ -1,3 +1,5 @@
+from datetime import date, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from prisma import Prisma
 
@@ -316,7 +318,67 @@ async def update_admin_team_member(
     return {"id": updated.id, "name": updated.name, "email": updated.email, "role": updated.role}
 
 
-# ── Leaves (TherapistServiceArea or AvailabilityBlock used as leaves) ──
+# ── Leaves (ScheduleBlockRequest used as leaves) ──
+
+
+@router.get("/leaves/stats")
+async def admin_leave_stats(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    today = date.today().isoformat()
+    this_month_start = date.today().replace(day=1).isoformat()
+    next_month_start = date.today().replace(day=28) + timedelta(days=4)
+    this_month_end = (next_month_start.replace(day=1) - timedelta(days=1)).isoformat()
+
+    pending = await db.scheduleblockrequest.count(where={"status": "PENDING"})
+
+    on_leave_today = await db.scheduleblockrequest.count(
+        where={
+            "status": "APPROVED",
+            "dateFrom": {"lte": today},
+            "dateTo": {"gte": today},
+        },
+    )
+
+    approved_this_month = await db.scheduleblockrequest.count(
+        where={
+            "status": "APPROVED",
+            "dateFrom": {"gte": this_month_start, "lte": this_month_end},
+        },
+    )
+
+    # Total sessions booked within any active leave window for their therapist
+    active_leaves = await db.scheduleblockrequest.find_many(
+        where={"status": "APPROVED"},
+    )
+    bookings_affected = 0
+    for leave in active_leaves:
+        try:
+            df = datetime.fromisoformat(leave.dateFrom)
+        except (ValueError, TypeError):
+            continue
+        dt = leave.dateTo
+        try:
+            dto = datetime.fromisoformat(dt) if dt else df
+        except (ValueError, TypeError):
+            dto = df
+        if dto < df:
+            dto = df
+        bookings_affected += await db.session.count(
+            where={
+                "therapistId": leave.therapistId,
+                "date": {"gte": df, "lte": dto},
+                "status": {"in": ["SCHEDULED", "IN_PROGRESS"]},
+            },
+        )
+
+    return {
+        "pending": pending,
+        "onLeaveToday": on_leave_today,
+        "approvedThisMonth": approved_this_month,
+        "bookingsAffected": bookings_affected,
+    }
 
 
 @router.get("/leaves")
@@ -324,6 +386,11 @@ async def list_admin_leaves(
     skip: int = 0,
     limit: int = 10,
     status: str | None = None,
+    search: str | None = None,
+    dateFrom: str | None = None,
+    dateTo: str | None = None,
+    sortBy: str | None = None,
+    sortOrder: str = "desc",
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
@@ -331,26 +398,80 @@ async def list_admin_leaves(
     if status:
         where["status"] = status.upper()
 
+    # Resolve therapist name search across related rows
+    if search:
+        therapists = await db.therapist.find_many(
+            where={"name": {"contains": search, "mode": "insensitive"}},
+            select={"id": True},
+        )
+        matching_ids = [t.id for t in therapists]
+        if matching_ids:
+            where["therapistId"] = {"in": matching_ids}
+        else:
+            where["therapistId"] = {"in": []}
+
+    if dateFrom:
+        where["dateTo"] = {"gte": dateFrom}
+    if dateTo:
+        where["dateFrom"] = {"lte": dateTo}
+
+    total = await db.scheduleblockrequest.count(where=where)
+
+    # Map sortable columns to Prisma order clauses. "therapist" sorts by the
+    # linked Therapist name; "bookingsAffected" is computed post-query so it
+    # falls back to createdAt ordering.
+    order: dict = {"createdAt": "desc"}
+    if sortBy == "therapist":
+        order = {"therapist": {"name": sortOrder}}
+    elif sortBy in ("dateFrom", "status", "reason"):
+        order = {sortBy: sortOrder}
     requests = await db.scheduleblockrequest.find_many(
         where=where,
-        order={"createdAt": "desc"},
+        order=order,
         skip=skip,
         take=limit,
     )
-    total = await db.scheduleblockrequest.count(where=where)
+
     items = []
     for r in requests:
         therapist = await db.therapist.find_unique(where={"id": r.therapistId})
-        user = await db.user.find_unique(where={"id": therapist.userId}) if therapist else None
+        therapist_user = (
+            await db.user.find_unique(where={"id": therapist.userId})
+            if therapist
+            else None
+        )
+        # Count booked sessions overlapping the leave window for this therapist
+        bookings_affected = 0
+        try:
+            df = datetime.fromisoformat(r.dateFrom)
+        except (ValueError, TypeError):
+            df = None
+        dt = r.dateTo
+        try:
+            dto = datetime.fromisoformat(dt) if dt else df
+        except (ValueError, TypeError):
+            dto = df
+        if df and dto:
+            if dto < df:
+                dto = df
+            bookings_affected = await db.session.count(
+                where={
+                    "therapistId": r.therapistId,
+                    "date": {"gte": df, "lte": dto},
+                    "status": {"in": ["SCHEDULED", "IN_PROGRESS"]},
+                },
+            )
         items.append({
             "id": r.id,
             "therapistId": r.therapistId,
+            "therapist": therapist.name if therapist else "Unknown",
             "therapistName": therapist.name if therapist else "Unknown",
-            "therapistEmail": user.email if user else "",
+            "therapistEmail": therapist_user.email if therapist_user else "",
             "dateFrom": r.dateFrom,
             "dateTo": r.dateTo,
             "reason": r.reason,
             "status": r.status,
+            "bookingsAffected": bookings_affected,
             "adminNotes": r.adminNotes,
             "createdAt": r.createdAt.isoformat() if r.createdAt else "",
         })
@@ -367,11 +488,25 @@ async def update_admin_leave(
     existing = await db.scheduleblockrequest.find_unique(where={"id": leave_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Leave not found")
-    new_status = data.get("status", existing.status)
-    admin_notes = data.get("adminNotes", existing.adminNotes)
+
+    update_data: dict = {}
+    if "status" in data:
+        new_status = data["status"].upper()
+        if new_status not in ("PENDING", "APPROVED", "REJECTED"):
+            raise HTTPException(status_code=422, detail="Invalid status")
+        update_data["status"] = new_status
+    if "adminNotes" in data:
+        update_data["adminNotes"] = data["adminNotes"]
+    if "dateFrom" in data:
+        update_data["dateFrom"] = data["dateFrom"]
+    if "dateTo" in data:
+        update_data["dateTo"] = data["dateTo"]
+    if "reason" in data:
+        update_data["reason"] = data["reason"]
+
     updated = await db.scheduleblockrequest.update(
         where={"id": leave_id},
-        data={"status": new_status.upper(), "adminNotes": admin_notes},
+        data=update_data,
     )
     return {"id": updated.id, "status": updated.status, "adminNotes": updated.adminNotes}
 
