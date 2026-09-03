@@ -290,7 +290,16 @@ async def request_block(
     db: Prisma = Depends(get_db),
 ):
     therapist = await _resolve_therapist(current_user, db)
-    return await create_block_request(db, therapist.id, data.model_dump())
+    result = await create_block_request(db, therapist.id, data.model_dump())
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="leave",
+        message=f"New leave request from {therapist.name} ({data.dateFrom} – {data.dateTo})",
+        action_type="leave",
+        action_id=result["id"],
+    )
+    return result
 
 
 @router.get("/block-requests")

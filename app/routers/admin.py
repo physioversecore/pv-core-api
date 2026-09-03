@@ -270,12 +270,18 @@ async def approve_therapist_admin(
         db, _.id, "APPROVE_THERAPIST", "Therapist", therapist_id,
         {"name": result.get("name")},
     )
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="verification",
+        message=f"Therapist **{result.get('name', 'Unknown')}** has been verified and approved",
+        action_type="therapist",
+        action_id=therapist_id,
+    )
     _, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "APPROVED":
         temp_password = None
         if getattr(user, "mustChangePassword", False):
-            # Therapist applied without a password — issue a temporary password
-            # that is emailed to them so they can log in and set their own.
             temp_password = await set_temporary_password(db, user.id)
         background_tasks.add_task(
             send_account_verified_email,
@@ -301,6 +307,14 @@ async def reject_therapist_admin(
     await log_admin_activity(
         db, _.id, "REJECT_THERAPIST", "Therapist", therapist_id,
         {"name": result.get("name"), "note": data.note},
+    )
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="verification",
+        message=f"Therapist **{result.get('name', 'Unknown')}** application was rejected",
+        action_type="therapist",
+        action_id=therapist_id,
     )
     _, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "REJECTED":
@@ -537,6 +551,14 @@ async def submit_complaint(
     db: Prisma = Depends(get_db),
 ):
     complaint = await create_complaint(db, data.model_dump())
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="complaint",
+        message=f"New complaint filed by {data.complainantName} against {data.againstName}",
+        action_type="complaint",
+        action_id=complaint.id,
+    )
     return ComplaintResponse.model_validate(complaint)
 
 
@@ -976,6 +998,14 @@ async def create_refund_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     result = await create_refund(db, data.model_dump())
     await log_admin_activity(db, current_user.id, "CREATE_REFUND", "Refund", result["id"], {"amount": data.amount})
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="refund",
+        message=f"Refund requested (Rs {data.amount:,.0f}) by {patient.name}",
+        action_type="refund",
+        action_id=result["id"],
+    )
     return RefundResponse(**result)
 
 

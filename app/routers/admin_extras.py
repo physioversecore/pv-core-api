@@ -5,6 +5,11 @@ from prisma import Prisma
 
 from app import get_admin_user, get_current_user, get_db
 from app.services.activity_log import log_admin_activity
+from app.services.notification import (
+    list_admin_notifications,
+    mark_notification_read,
+    mark_all_notifications_read,
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin Extras"])
 
@@ -192,53 +197,39 @@ async def delete_admin_payout(
 
 
 @router.get("/notifications")
-async def list_admin_notifications(
+async def list_notifications(
     skip: int = 0,
     limit: int = 20,
-    unread_only: bool = False,
+    category: str | None = None,
+    read: bool | None = None,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    sessions = await db.session.find_many(
-        order={"createdAt": "desc"},
-        take=limit,
-        include={"therapist": True, "patient": True},
+    items, total, unread_count = await list_admin_notifications(
+        db, skip=skip, limit=limit, category=category, read=read,
     )
-    notifications = []
-    for i, s in enumerate(sessions):
-        patient = s.patient if hasattr(s, "patient") and s.patient else None
-        therapist = s.therapist if hasattr(s, "therapist") and s.therapist else None
-        notif_type = {
-            "SCHEDULED": "new_booking",
-            "COMPLETED": "session_completed",
-            "CANCELLED": "session_cancelled",
-            "RESCHEDULE_REQUESTED": "reschedule_requested",
-        }.get(s.status, "info")
-        notifications.append({
-            "id": s.id,
-            "type": notif_type,
-            "message": f"Session {s.status.lower()} with {patient.name if patient else 'Unknown'} by {therapist.name if therapist else 'Unknown'}",
-            "read": False,
-            "createdAt": s.createdAt.isoformat() if s.createdAt else "",
-        })
-    return {"items": notifications, "total": len(notifications)}
+    return {"items": items, "total": total, "unreadCount": unread_count}
+
+
+@router.put("/notifications/read-all")
+async def mark_all_notifications_read_endpoint(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    count = await mark_all_notifications_read(db)
+    return {"message": "All notifications marked as read", "count": count}
 
 
 @router.put("/notifications/{notification_id}")
-async def mark_notification_read(
+async def mark_notification_read_endpoint(
     notification_id: str,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    return {"id": notification_id, "read": True}
-
-
-@router.put("/notifications/read-all")
-async def mark_all_notifications_read(
-    _=Depends(get_admin_user),
-    db: Prisma = Depends(get_db),
-):
-    return {"message": "All notifications marked as read", "count": 0}
+    result = await mark_notification_read(db, notification_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return result
 
 
 # ── Team management (admin users) ──

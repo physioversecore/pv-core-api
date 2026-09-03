@@ -36,4 +36,15 @@ async def update_application(
     current_user=Depends(get_therapist_user),
     db: Prisma = Depends(get_db),
 ):
-    return await update_therapist_application(db, current_user.id, data)
+    result = await update_therapist_application(db, current_user.id, data)
+    if result.get("success"):
+        from app.services.notification import log_admin_notification
+        therapist = await db.therapist.find_unique(where={"userId": current_user.id})
+        await log_admin_notification(
+            db,
+            category="therapist",
+            message=f"New therapist application submitted by **{current_user.name}**",
+            action_type="therapist",
+            action_id=therapist.id if therapist else current_user.id,
+        )
+    return result

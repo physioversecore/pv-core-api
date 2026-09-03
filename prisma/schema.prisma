@@ -616,3 +616,21 @@ model TherapistApplicationFeedback {
 
   @@index([therapistId])
 }
+
+model AdminNotification {
+  id               String    @id @default(cuid())
+  category         String
+  message          String
+  read             Boolean   @default(false)
+  readAt           DateTime?
+  actionType       String?
+  actionId         String?
+  relatedEntityType String?
+  relatedEntityId  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([category])
+  @@index([read])
+  @@index([createdAt])
+}
