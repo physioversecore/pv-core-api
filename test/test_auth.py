@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from prisma.enums import Role
+
 from .conftest import MOCK_PATIENT, MOCK_THERAPIST_USER
 
 SIGNUP_DATA = {
@@ -129,6 +131,22 @@ class TestSignup:
         body = response.json()
         assert body["access_token"] == "mock-token"
         assert body["user"]["email"] == "patient@test.com"
+
+    @patch("app.routers.auth.create_access_token", return_value="mock-token")
+    def test_patient_signup_is_auto_approved(self, mock_token, client, mock_db):
+        mock_db.user.find_unique.return_value = None
+        mock_db.user.create.return_value = MOCK_PATIENT
+        mock_db.emailverification.find_first.return_value = SimpleNamespace(
+            id="otp-1", email="new@test.com", code="123456", purpose="signup",
+            used=True, attempts=0, createdAt=NOW, expiresAt=NOW + timedelta(minutes=5),
+        )
+
+        response = client.post("/api/v1/auth/signup", json=SIGNUP_DATA)
+
+        assert response.status_code == 201
+        created = mock_db.user.create.call_args.kwargs["data"]
+        assert created["role"] == Role.PATIENT
+        assert created["status"] == "APPROVED"
 
     def test_signup_no_otp_verification(self, client, mock_db):
         mock_db.user.find_unique.return_value = None
