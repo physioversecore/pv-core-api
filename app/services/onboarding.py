@@ -1,6 +1,24 @@
+import re
 from datetime import datetime
 
 from prisma import Prisma
+
+from app.services.auth import hash_password
+
+
+def validate_password(password: str) -> str | None:
+    """Validate password strength. Returns an error message or None if valid."""
+    if not password or len(password) < 8:
+        return "Password must be at least 8 characters long"
+    if not re.search(r"[A-Z]", password):
+        return "Password must contain at least one uppercase letter"
+    if not re.search(r"[a-z]", password):
+        return "Password must contain at least one lowercase letter"
+    if not re.search(r"[0-9]", password):
+        return "Password must contain at least one number"
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "Password must contain at least one special character"
+    return None
 
 
 def _parse_dob(val):
@@ -28,6 +46,17 @@ async def get_onboarding_status(db: Prisma, user_id: str) -> dict:
 async def save_onboarding_progress(db: Prisma, user_id: str, step: str, data: dict):
     """Save partial onboarding progress (called on each step navigation)."""
     existing = await db.patientprofile.find_unique(where={"userId": user_id})
+
+    # Handle password (stored on the User model, hashed)
+    password = data.pop("password", None)
+    if password:
+        err = validate_password(password)
+        if err:
+            raise ValueError(err)
+        await db.user.update(
+            where={"id": user_id},
+            data={"password": hash_password(password), "mustChangePassword": False},
+        )
 
     update_fields: dict = {"onboardingStep": step}
 
@@ -86,7 +115,7 @@ async def save_onboarding_progress(db: Prisma, user_id: str, step: str, data: di
 
 async def complete_onboarding(db: Prisma, user_id: str, data: dict):
     """Mark onboarding as completed and save all profile data."""
-    # Save all fields first
+    # Save all fields first (password is handled inside save_onboarding_progress)
     await save_onboarding_progress(db, user_id, "review", data)
 
     # Mark as completed
