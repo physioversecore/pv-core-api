@@ -80,6 +80,15 @@ async def process_booking_payment(
         },
     )
 
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="payment",
+        message=f"Payment of Rs {data.fee + data.platformFee:,.0f} processed via {data.paymentMethod}",
+        action_type="payment",
+        action_id=payment.id,
+    )
+
     return BookingPaymentResponse(
         session=SessionPaymentResponse.model_validate(session),
         payment=PaymentResponse.model_validate(payment),

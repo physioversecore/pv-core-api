@@ -146,6 +146,31 @@ async def update_session_by_id(
     updated = await update_session(
         db, session_id, data.model_dump(exclude_none=True)
     )
+
+    new_status = data.model_dump(exclude_none=True).get("status")
+    if new_status:
+        from app.services.notification import log_admin_notification
+        from app.services.session import _enrich_session
+        enriched = _enrich_session(session) if not hasattr(session, "patient") else session
+        patient_name = enriched.get("patient", {}).get("name", "Unknown") if isinstance(enriched.get("patient"), dict) else getattr(getattr(session, "patient", None), "name", "Unknown")
+        therapist_name = enriched.get("therapist", {}).get("name", "Unknown") if isinstance(enriched.get("therapist"), dict) else getattr(getattr(session, "therapist", None), "name", "Unknown")
+        if new_status == "CANCELLED":
+            await log_admin_notification(
+                db,
+                category="booking",
+                message=f"Booking cancelled — {patient_name} with {therapist_name}",
+                action_type="booking",
+                action_id=session_id,
+            )
+        elif new_status == "RESCHEDULE_REQUESTED":
+            await log_admin_notification(
+                db,
+                category="reschedule",
+                message=f"Reschedule requested for {patient_name}'s session with {therapist_name}",
+                action_type="booking",
+                action_id=session_id,
+            )
+
     return SessionResponse.model_validate(updated)
 
 

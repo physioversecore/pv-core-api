@@ -143,7 +143,10 @@ async def onboarding(
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
-    return await complete_onboarding(db, current_user.id, data.model_dump(exclude_unset=True))
+    try:
+        return await complete_onboarding(db, current_user.id, data.model_dump(exclude_unset=True))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.post("/me/onboarding/progress")
@@ -153,7 +156,10 @@ async def onboarding_progress(
     db: Prisma = Depends(get_db),
 ):
     step = data.pop("step", "personal")
-    await save_onboarding_progress(db, current_user.id, step, data)
+    try:
+        await save_onboarding_progress(db, current_user.id, step, data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     return {"success": True}
 
 

@@ -203,8 +203,11 @@ async def signup(
                 detail="Password is required",
             )
         user_data["referralCode"] = generate_referral_code()
+        # Patients are auto-verified/active at signup — no admin approval needed.
+        user_data["status"] = "APPROVED"
 
     if role_val == "THERAPIST":
+        # Therapists require admin verification before they become active.
         user_data["status"] = "PENDING"
         # Therapists apply without a password. Store a random placeholder that is
         # never emailed — the admin approval step replaces it with a real

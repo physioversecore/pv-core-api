@@ -76,6 +76,10 @@ class AdminTherapistUpdate(BaseModel):
     email: str | None = None
     status: str | None = None
     isActive: bool | None = None
+    gender: str | None = None
+    price: float | None = None
+    experience: int | None = None
+    bio: str | None = None
 
 
 class AdminRejectRequest(BaseModel):
