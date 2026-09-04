@@ -537,11 +537,51 @@ async def delete_admin_leave(
 # ── Incidents (Complaints used as incidents) ──
 
 
+COMPLAINT_TO_INCIDENT_STATUS = {
+    "Open": "Active",
+    "In Progress": "Investigating",
+    "Investigating": "Investigating",
+    "Escalated": "Escalated",
+    "Resolved": "Resolved",
+    "Dismissed": "Resolved",
+}
+PRIORITY_TO_SEVERITY = {
+    "Urgent": "Critical",
+    "High": "High",
+    "Normal": "Medium",
+    "Medium": "Medium",
+    "Critical": "Critical",
+}
+
+
+def _map_complaint_to_incident(c) -> dict:
+    raw_status = getattr(c, "status", "Open") or "Open"
+    raw_priority = getattr(c, "priority", "Normal") or "Normal"
+    complainant_name = getattr(c, "complainantName", "") or ""
+    against_name = getattr(c, "againstName", "") or ""
+    ctype = getattr(c, "type", "patient") or "patient"
+    return {
+        "id": c.id,
+        "reportedBy": "Therapist" if ctype == "therapist" else "Patient",
+        "therapist": against_name if ctype == "patient" else complainant_name,
+        "patient": complainant_name if ctype == "patient" else against_name,
+        "severity": PRIORITY_TO_SEVERITY.get(raw_priority, "Medium"),
+        "summary": getattr(c, "description", "") or "",
+        "status": COMPLAINT_TO_INCIDENT_STATUS.get(raw_status, "Active"),
+        "reportedAt": c.createdAt.isoformat() if c.createdAt else "",
+        "assignedTo": getattr(c, "assignee", None),
+        "phone": "",
+    }
+
+
 @router.get("/incidents")
 async def list_admin_incidents(
     skip: int = 0,
     limit: int = 10,
     status: str | None = None,
+    severity: str | None = None,
+    reportedBy: str | None = None,
+    search: str | None = None,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
@@ -555,20 +595,24 @@ async def list_admin_incidents(
         skip=skip,
         take=limit,
     )
-    total = await db.complaint.count(where=where)
-    items = []
-    for c in complaints:
-        items.append({
-            "id": c.id,
-            "type": c.type if hasattr(c, "type") else "general",
-            "category": c.category if hasattr(c, "category") else "",
-            "description": c.description if hasattr(c, "description") else "",
-            "status": c.status,
-            "priority": c.priority if hasattr(c, "priority") else "medium",
-            "complainantId": c.complainantId if hasattr(c, "complainantId") else "",
-            "againstId": c.againstId if hasattr(c, "againstId") else "",
-            "createdAt": c.createdAt.isoformat() if c.createdAt else "",
-        })
+
+    items = [_map_complaint_to_incident(c) for c in complaints]
+
+    if severity:
+        items = [i for i in items if i["severity"] == severity]
+    if reportedBy:
+        items = [i for i in items if i["reportedBy"] == reportedBy]
+    if search:
+        q = search.lower()
+        items = [
+            i for i in items
+            if q in (i["therapist"] or "").lower()
+            or q in (i["patient"] or "").lower()
+            or q in (i["id"] or "").lower()
+            or q in (i["summary"] or "").lower()
+        ]
+
+    total = len(complaints)
     return {"items": items, "total": total}
 
 
@@ -585,7 +629,7 @@ async def escalate_incident(
         where={"id": incident_id},
         data={"status": "Escalated"},
     )
-    return {"id": updated.id, "status": updated.status}
+    return _map_complaint_to_incident(updated)
 
 
 @router.put("/incidents/{incident_id}/resolve")
@@ -602,7 +646,9 @@ async def resolve_incident(
         where={"id": incident_id},
         data={"status": "Resolved"},
     )
-    return {"id": updated.id, "status": updated.status, "message": data.get("outcome", "Resolved")}
+    result = _map_complaint_to_incident(updated)
+    result["message"] = data.get("outcome", "Resolved")
+    return result
 
 
 # ── Analytics ──
@@ -618,23 +664,77 @@ async def admin_analytics_stats(
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     last_month = (month_start - timedelta(days=1)).replace(day=1)
+    month_start_naive = month_start.replace(tzinfo=None)
+    last_month_naive = last_month.replace(tzinfo=None)
 
     total_sessions = await db.session.count()
     month_sessions = await db.session.count(
-        where={"createdAt": {"gte": month_start.replace(tzinfo=None)}}
+        where={"createdAt": {"gte": month_start_naive}}
     )
     completed = await db.session.count(where={"status": "COMPLETED"})
     cancelled = await db.session.count(where={"status": "CANCELLED"})
     total_patients = await db.user.count(where={"role": "PATIENT"})
     total_therapists = await db.user.count(where={"role": "THERAPIST"})
 
-    cancellation_rate = (cancelled / total_sessions * 100) if total_sessions > 0 else 0
+    cached_total = (cancelled / total_sessions * 100) if total_sessions > 0 else 0
+    prev_cancelled = await db.session.count(
+        where={"status": "CANCELLED", "createdAt": {"gte": last_month_naive, "lt": month_start_naive}}
+    )
+    prev_total = await db.session.count(
+        where={"createdAt": {"gte": last_month_naive, "lt": month_start_naive}}
+    )
+
+    # Revenue from completed payments (MTD vs last month)
+    revenue_mtd = 0.0
+    revenue_last = 0.0
+    for p in await db.payment.find_many(where={"status": "COMPLETED"}):
+        if p.createdAt and p.createdAt.replace(tzinfo=timezone.utc) >= month_start:
+            revenue_mtd += p.amount or 0
+        elif p.createdAt and last_month <= p.createdAt.replace(tzinfo=timezone.utc) < month_start:
+            revenue_last += p.amount or 0
+
+    def _fmt_revenue(amount: float) -> str:
+        if amount >= 100000:
+            return f"Rs {amount / 100000:.1f}L"
+        return f"Rs {amount:,.0f}"
+
+    revenue_change = 0.0
+    if revenue_last > 0:
+        revenue_change = (revenue_mtd - revenue_last) / revenue_last * 100
+
+    # Repeat booking rate: patients with >=2 sessions (all-time vs last month)
+    patients = await db.user.find_many(where={"role": "PATIENT"}, include={"sessionsAsPatient": True})
+    repeat_all = 0
+    repeat_month = 0
+    active_month_users = set()
+    for u in patients:
+        count_total = len(u.sessionsAsPatient or [])
+        count_month = sum(1 for s in (u.sessionsAsPatient or []) if s.createdAt and s.createdAt.replace(tzinfo=timezone.utc) >= month_start)
+        if count_total >= 2:
+            repeat_all += 1
+            if count_month > 0:
+                active_month_users.add(u.id)
+        if count_month >= 2:
+            repeat_month += 1
+    repeat_rate = (repeat_all / len(patients) * 100) if patients else 0
+    repeat_rate_month = (repeat_month / max(len(active_month_users), 1) * 100)
+
+    # Avg session rating from reviews
+    reviews = await db.review.find_many()
+    avg_rating = round(sum(r.rating for r in reviews) / len(reviews), 1) if reviews else 4.5
 
     return {
         "totalSessions": total_sessions,
         "monthSessions": month_sessions,
         "completedSessions": completed,
-        "cancellationRate": round(cancellation_rate, 1),
+        "cancellationRate": round(cached_total, 1),
+        "cancellationChange": round((cached_total - (prev_cancelled / prev_total * 100 if prev_total else 0)), 1),
+        "revenueMTD": _fmt_revenue(revenue_mtd),
+        "revenueChange": f"{revenue_change:.0f}%",
+        "repeatBookingRate": f"{round(repeat_rate):.0f}%",
+        "repeatChange": f"{round(repeat_rate - (repeat_rate_month if repeat_all else repeat_rate)):.0f}%",
+        "avgSessionRating": f"{avg_rating}",
+        "ratingNote": "Above 4.5 target" if avg_rating >= 4.5 else "Below 4.5 target",
         "totalPatients": total_patients,
         "totalTherapists": total_therapists,
     }
@@ -654,6 +754,7 @@ async def bookings_by_zone(
         result.append({
             "zone": area.name,
             "bookings": count,
+            "isWarning": count < 2,
         })
     if not result:
         sessions = await db.session.find_many()
@@ -661,7 +762,7 @@ async def bookings_by_zone(
         city_counts = defaultdict(int)
         for s in sessions:
             city_counts["Unknown"] += 1
-        result = [{"zone": k, "bookings": v} for k, v in city_counts.items()]
+        result = [{"zone": k, "bookings": v, "isWarning": False} for k, v in city_counts.items()]
     return result
 
 
@@ -680,10 +781,13 @@ async def cancellation_rate_by_therapist(
         rate = (cancelled / total * 100) if total > 0 else 0
         result.append({
             "therapistId": t.id,
+            "therapist": t.name,
             "therapistName": t.name,
             "totalSessions": total,
             "cancelled": cancelled,
             "rate": round(rate, 1),
+            "isWarning": rate >= 10,
+            "isAmber": 5 <= rate < 10,
         })
     return result
 
@@ -708,13 +812,23 @@ async def revenue_trend(
         key = p.createdAt.strftime("%Y-%m") if p.createdAt else "unknown"
         monthly[key] += p.amount
 
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    def _fmt_revenue(amount: float) -> str:
+        if amount >= 100000:
+            return f"Rs {amount / 100000:.1f}L"
+        return f"Rs {amount:,.0f}"
+
     trend = []
     for i in range(months - 1, -1, -1):
         d = now - timedelta(days=i * 30)
         key = d.strftime("%Y-%m")
+        label = month_labels[int(key.split("-")[1]) - 1]
+        if i == 0:
+            label = f"{label} MTD"
         trend.append({
-            "month": key,
-            "revenue": round(monthly.get(key, 0), 2),
+            "month": label,
+            "revenue": _fmt_revenue(monthly.get(key, 0)),
         })
     return trend
 
