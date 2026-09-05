@@ -50,7 +50,15 @@ class ReferralEntry(BaseModel):
 class ReferralSummaryResponse(BaseModel):
     code: str
     link: str
+
+    # The headline rate for *this* viewer's role -- a therapist earns more for
+    # bringing another therapist than a patient earns for bringing a friend.
     awardPoints: int
+
+    # "TOTAL EARNED" on the design: everything this user has been granted for
+    # referrals, held and available alike.
+    totalEarned: int = 0
+
     referrals: list[ReferralEntry]
 
 

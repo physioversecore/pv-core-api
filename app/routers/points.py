@@ -102,10 +102,23 @@ async def my_referrals(
             )
         )
 
+    # A therapist's headline is the therapist-to-therapist tier, which is the
+    # figure their screen advertises; a patient sees the friend rate.
+    if current_user.role == "THERAPIST":
+        headline = int(config["referralAwardTherapistRefersTherapist"])
+    else:
+        headline = int(config["referralAwardPatientReferrer"])
+
+    earned_rows = await db.pointtransaction.find_many(
+        where={"userId": current_user.id, "type": "REFERRAL_EARN"}
+    )
+    total_earned = sum(r.delta for r in earned_rows if r.delta > 0)
+
     return ReferralSummaryResponse(
         code=code,
         link="https://sahayatri.np/r/{}".format(code),
-        awardPoints=int(config["referralAwardPoints"]),
+        awardPoints=headline,
+        totalEarned=total_earned,
         referrals=entries,
     )
 

@@ -24,8 +24,20 @@ DEFAULT_CONFIG = {
     # Rs per point. Stored rather than hardcoded so it can change without a
     # deploy; never re-rate points already earned.
     "pointToNpr": 1.0,
-    "referralAwardPoints": 200,
-    "referralAwardsBothSides": True,
+    # Tiered by who refers whom, per the prototype's Refer & earn screens: a
+    # patient earns Rs 500 a friend, while a therapist earns Rs 1,000 for
+    # bringing another therapist and Rs 500 for bringing a patient. Kept as
+    # separate keys rather than one number so the therapist tier can move
+    # without touching the patient one.
+    "referralAwardPatientReferrer": 500,
+    "referralAwardTherapistRefersTherapist": 1000,
+    "referralAwardTherapistRefersPatient": 500,
+    # The prototype shows one figure, the referrer's -- the referee is not
+    # paid for being invited.
+    "referralAwardsBothSides": False,
+    # Retained so an existing stored config still resolves, and as the value
+    # used when a role pairing is not one of the three above.
+    "referralAwardPoints": 500,
     # Days an award stays PENDING before it can be spent.
     "holdDays": 7,
     # None disables expiry. Off at launch: easy to switch on for newly earned
@@ -174,6 +186,25 @@ async def _within_caps(db: Prisma, referrer_id: str, config: dict) -> bool:
     return True
 
 
+
+def _referral_amount(config: dict, referrer, referee) -> int:
+    """What the referrer earns, by the roles of both parties.
+
+    A missing referrer or an unrecognised pairing falls back to the flat
+    `referralAwardPoints` rather than paying nothing, so a role added later
+    still rewards the person who brought someone in.
+    """
+    referrer_role = getattr(referrer, "role", None)
+    referee_role = getattr(referee, "role", None)
+
+    if referrer_role == "THERAPIST":
+        if referee_role == "THERAPIST":
+            return int(config["referralAwardTherapistRefersTherapist"])
+        return int(config["referralAwardTherapistRefersPatient"])
+    if referrer_role == "PATIENT":
+        return int(config["referralAwardPatientReferrer"])
+    return int(config["referralAwardPoints"])
+
 async def award_referral_for_session(db: Prisma, session) -> list:
     """Award both sides when a referred patient completes their first session.
 
@@ -182,12 +213,14 @@ async def award_referral_for_session(db: Prisma, session) -> list:
     only the first completed session ever pays out.
     """
     config = await get_config(db)
-    amount = int(config["referralAwardPoints"])
-    if amount <= 0:
-        return []
 
     patient = await db.user.find_unique(where={"id": session.patientId})
     if not patient or not patient.referredById:
+        return []
+
+    referrer = await db.user.find_unique(where={"id": patient.referredById})
+    amount = _referral_amount(config, referrer, patient)
+    if amount <= 0:
         return []
 
     # One payout per referred user, ever -- not per completed session.

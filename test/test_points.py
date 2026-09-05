@@ -201,7 +201,12 @@ class TestRedemption:
 class TestDefaults:
     def test_the_spec_defaults_are_what_ships(self):
         # These are the [R] recommendations; changing one is a product call.
-        assert DEFAULT_CONFIG["referralAwardPoints"] == 200
+        # The referral amounts now follow the prototype's Refer & earn screens
+        # rather than the spec's original flat Rs 200 both-sides proposal.
+        assert DEFAULT_CONFIG["referralAwardPatientReferrer"] == 500
+        assert DEFAULT_CONFIG["referralAwardTherapistRefersTherapist"] == 1000
+        assert DEFAULT_CONFIG["referralAwardTherapistRefersPatient"] == 500
+        assert DEFAULT_CONFIG["referralAwardsBothSides"] is False
         assert DEFAULT_CONFIG["holdDays"] == 7
         assert DEFAULT_CONFIG["expiryDays"] is None, "expiry is off at launch"
         assert DEFAULT_CONFIG["maxRewardedReferralsPerMonth"] == 5
