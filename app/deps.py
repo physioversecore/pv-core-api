@@ -32,6 +32,16 @@ async def get_or_404(db: Prisma, model: str, id: str):
 security = HTTPBearer()
 
 
+def _check_token_version(payload: dict, user) -> None:
+    """Reject tokens issued before the latest 'log out all devices'."""
+    expected = user.tokenVersion or 0
+    if payload.get("ver", 0) != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked — please log in again",
+        )
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Prisma = Depends(get_db),
@@ -63,6 +73,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    _check_token_version(payload, user)
     if user.role == "THERAPIST" and user.status != "APPROVED":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -104,6 +115,7 @@ async def get_current_user_lenient(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    _check_token_version(payload, user)
     return user
 
 
@@ -133,7 +145,14 @@ async def get_optional_user(
     except JWTError:
         return None
 
-    return await db.user.find_unique(where={"id": user_id})
+    user = await db.user.find_unique(where={"id": user_id})
+    if user is None:
+        return None
+    try:
+        _check_token_version(payload, user)
+    except HTTPException:
+        return None
+    return user
 
 
 async def get_therapist_user(
@@ -169,6 +188,7 @@ async def get_therapist_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    _check_token_version(payload, user)
     if user.role != "THERAPIST":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

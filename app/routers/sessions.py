@@ -56,6 +56,11 @@ async def book_session(
             },
         )
     except ValueError as e:
+        if str(e) == "CONFLICT":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That time slot was just booked — please choose another.",
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return SessionResponse.model_validate(session)
 
@@ -147,18 +152,48 @@ async def update_session_by_id(
         db, session_id, data.model_dump(exclude_none=True)
     )
 
+    # Upstream's admin-feed logging runs first and unchanged; the referral
+    # ledger hangs off the same transition below.
+    new_status = data.model_dump(exclude_none=True).get("status")
+    if new_status:
+        from app.services.notification import log_admin_notification
+        from app.services.session import _enrich_session
+        enriched = _enrich_session(session) if not hasattr(session, "patient") else session
+        patient_name = enriched.get("patient", {}).get("name", "Unknown") if isinstance(enriched.get("patient"), dict) else getattr(getattr(session, "patient", None), "name", "Unknown")
+        therapist_name = enriched.get("therapist", {}).get("name", "Unknown") if isinstance(enriched.get("therapist"), dict) else getattr(getattr(session, "therapist", None), "name", "Unknown")
+        if new_status == "CANCELLED":
+            await log_admin_notification(
+                db,
+                category="booking",
+                message=f"Booking cancelled — {patient_name} with {therapist_name}",
+                action_type="booking",
+                action_id=session_id,
+            )
+        elif new_status == "RESCHEDULE_REQUESTED":
+            await log_admin_notification(
+                db,
+                category="reschedule",
+                message=f"Reschedule requested for {patient_name}'s session with {therapist_name}",
+                action_type="booking",
+                action_id=session_id,
+            )
+
     # Referral points pay out on a *completed* session, not a booked one --
     # book-then-cancel would otherwise be free money. Only on the transition,
     # so re-saving a completed session cannot pay twice (the ledger's
     # idempotency key is the backstop).
-    new_status = getattr(updated, "status", None) or data.status
-    if new_status == "COMPLETED" and previous_status != "COMPLETED":
+    #
+    # Read from the updated row rather than the request: upstream's new_status
+    # above is request-only and is None when the caller changed something else,
+    # which would silently skip the award.
+    effective_status = getattr(updated, "status", None) or new_status
+    if effective_status == "COMPLETED" and previous_status != "COMPLETED":
         awarded = await award_referral_for_session(db, session)
         for user_id, row in awarded:
             background_tasks.add_task(
                 _notify_referral_award, db, user_id, row.delta
             )
-    elif new_status == "CANCELLED" and previous_status == "COMPLETED":
+    elif effective_status == "CANCELLED" and previous_status == "COMPLETED":
         # A completed session that is later cancelled or refunded takes its
         # award with it.
         await reverse_for_session(db, session_id, "Session cancelled after completion")

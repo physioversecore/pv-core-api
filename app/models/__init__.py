@@ -1,5 +1,6 @@
 from app.models.auth import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
     ResetPasswordRequest,
@@ -185,4 +186,9 @@ from app.models.package import (
     PackageListResponse,
     PackageResponse,
     PackageUpdate,
+)
+from app.models.rate_change import (
+    RateChangeListResponse,
+    RateChangeRequestCreate,
+    RateChangeRequestResponse,
 )

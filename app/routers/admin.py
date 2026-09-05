@@ -158,6 +158,10 @@ async def update_user_status(
         where={"id": user_id},
         data={"status": getattr(UserStatus, new_status.upper(), UserStatus.APPROVED)},
     )
+    await log_admin_activity(
+        db, _.id, "TOGGLE_USER_STATUS", "User", user_id,
+        {"name": updated.name, "status": updated.status},
+    )
     return UserResponse.model_validate(updated)
 
 
@@ -213,6 +217,11 @@ async def create_therapist_by_admin_endpoint(
             detail="A user with this email already exists",
         )
     result = await create_therapist_by_admin(db, data.model_dump())
+    await log_admin_activity(
+        db, _.id, "CREATE_THERAPIST", "Therapist",
+        result.get("id") or "",
+        {"name": result.get("name")},
+    )
     return AdminTherapistCreatedResponse(**result)
 
 
@@ -245,6 +254,10 @@ async def update_therapist_admin(
         )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await log_admin_activity(
+        db, _.id, "UPDATE_THERAPIST", "Therapist", therapist_id,
+        {"name": result.get("name")},
+    )
     return result
 
 
@@ -258,12 +271,22 @@ async def approve_therapist_admin(
     result = await approve_admin_therapist(db, therapist_id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await log_admin_activity(
+        db, _.id, "APPROVE_THERAPIST", "Therapist", therapist_id,
+        {"name": result.get("name")},
+    )
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="verification",
+        message=f"Therapist **{result.get('name', 'Unknown')}** has been verified and approved",
+        action_type="therapist",
+        action_id=therapist_id,
+    )
     _, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "APPROVED":
         temp_password = None
         if getattr(user, "mustChangePassword", False):
-            # Therapist applied without a password — issue a temporary password
-            # that is emailed to them so they can log in and set their own.
             temp_password = await set_temporary_password(db, user.id)
         background_tasks.add_task(
             send_account_verified_email,
@@ -286,6 +309,18 @@ async def reject_therapist_admin(
     result = await reject_admin_therapist(db, therapist_id, data.note)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await log_admin_activity(
+        db, _.id, "REJECT_THERAPIST", "Therapist", therapist_id,
+        {"name": result.get("name"), "note": data.note},
+    )
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="verification",
+        message=f"Therapist **{result.get('name', 'Unknown')}** application was rejected",
+        action_type="therapist",
+        action_id=therapist_id,
+    )
     _, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "REJECTED":
         background_tasks.add_task(
@@ -306,6 +341,9 @@ async def delete_therapist_admin(
     deleted = await delete_admin_therapist(db, therapist_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await log_admin_activity(
+        db, _.id, "DELETE_THERAPIST", "Therapist", therapist_id,
+    )
 
 
 @router.get("/patients", response_model=AdminPatientListResponse)
@@ -363,6 +401,10 @@ async def update_patient_admin(
     )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await log_admin_activity(
+        db, _.id, "UPDATE_PATIENT", "Patient", patient_id,
+        {"name": result.get("name")},
+    )
     return result
 
 
@@ -375,6 +417,9 @@ async def delete_patient_admin(
     deleted = await delete_admin_patient(db, patient_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    await log_admin_activity(
+        db, _.id, "DELETE_PATIENT", "Patient", patient_id,
+    )
 
 
 @router.get("/dashboard/stats", response_model=AdminDashboardStats)
@@ -511,6 +556,14 @@ async def submit_complaint(
     db: Prisma = Depends(get_db),
 ):
     complaint = await create_complaint(db, data.model_dump())
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="complaint",
+        message=f"New complaint filed by {data.complainantName} against {data.againstName}",
+        action_type="complaint",
+        action_id=complaint.id,
+    )
     return ComplaintResponse.model_validate(complaint)
 
 
@@ -842,6 +895,17 @@ async def update_verification_endpoint(
                 payload.get("note") or "",
             )
 
+    new_status = payload.get("status")
+    if new_status == "Verified":
+        action, meta = "APPROVE_VERIFICATION", {}
+    elif new_status == "Rejected":
+        action, meta = "REJECT_VERIFICATION", {"note": payload.get("note")}
+    else:
+        action, meta = "UPDATE_VERIFICATION", {"status": new_status}
+    await log_admin_activity(
+        db, _.id, action, "Verification", verification_id, meta,
+    )
+
     return VerificationResponse(**result)
 
 
@@ -855,6 +919,9 @@ async def suspend_therapist_bookings(
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     result = await update_verification(db, verification_id, {"status": "Expired"})
+    await log_admin_activity(
+        db, _.id, "SUSPEND_VERIFICATION", "Verification", verification_id,
+    )
     return VerificationResponse(**result)
 
 
@@ -868,6 +935,9 @@ async def delete_verification_endpoint(
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await delete_verification(db, verification_id)
+    await log_admin_activity(
+        db, _.id, "DELETE_VERIFICATION", "Verification", verification_id,
+    )
 
 
 # ── Refunds ──
@@ -933,6 +1003,14 @@ async def create_refund_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
     result = await create_refund(db, data.model_dump())
     await log_admin_activity(db, current_user.id, "CREATE_REFUND", "Refund", result["id"], {"amount": data.amount})
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="refund",
+        message=f"Refund requested (Rs {data.amount:,.0f}) by {patient.name}",
+        action_type="refund",
+        action_id=result["id"],
+    )
     return RefundResponse(**result)
 
 
@@ -998,24 +1076,18 @@ async def list_activity_log(
     adminId: str | None = None,
     targetType: str | None = None,
     actionType: str | None = None,
+    search: str | None = None,
+    dateFrom: str | None = None,
+    dateTo: str | None = None,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
     items, total = await get_activity_logs(
         db, skip=skip, limit=limit,
         admin_id=adminId, target_type=targetType, action_type=actionType,
+        search=search, date_from=dateFrom, date_to=dateTo,
     )
     return {
-        "items": [
-            {
-                "id": i.id,
-                "timestamp": i.createdAt.isoformat(),
-                "actor": i.adminId,
-                "actorId": i.adminId,
-                "actionType": i.action,
-                "description": f"{i.action} on {i.targetType} {i.targetId}",
-            }
-            for i in items
-        ],
+        "items": items,
         "total": total,
     }

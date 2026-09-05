@@ -15,12 +15,22 @@ SESSION_CREATE_DATA = {
 
 class TestCreateSession:
     def test_create_by_patient(self, patient_client, mock_db):
+        mock_db.session.find_many.return_value = []
         mock_db.session.create.return_value = MOCK_SESSION
 
         response = patient_client.post("/api/v1/sessions", json=SESSION_CREATE_DATA)
 
         assert response.status_code == 201
         assert response.json()["id"] == "session-1"
+
+    def test_create_conflict_returns_409(self, patient_client, mock_db):
+        mock_db.session.find_many.return_value = [MOCK_SESSION]
+
+        response = patient_client.post("/api/v1/sessions", json=SESSION_CREATE_DATA)
+
+        assert response.status_code == 409
+        assert "booked" in response.json()["detail"].lower()
+        mock_db.session.create.assert_not_awaited()
 
     def test_create_by_therapist_forbidden(self, therapist_client):
         response = therapist_client.post(

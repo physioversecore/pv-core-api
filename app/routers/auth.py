@@ -5,6 +5,7 @@ from prisma.enums import Role
 
 from app import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     GoogleAuthRequest,
     LoginRequest,
@@ -16,6 +17,7 @@ from app import (
     UserUpdate,
     VerifyOtpRequest,
     authenticate_user,
+    bump_token_version,
     create_access_token,
     create_therapist_signup,
     create_user,
@@ -138,7 +140,9 @@ async def login_with_otp(data: VerifyOtpRequest, db: Prisma = Depends(get_db)):
             detail=detail,
         )
 
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),
@@ -199,8 +203,11 @@ async def signup(
                 detail="Password is required",
             )
         user_data["referralCode"] = generate_referral_code()
+        # Patients are auto-verified/active at signup — no admin approval needed.
+        user_data["status"] = "APPROVED"
 
     if role_val == "THERAPIST":
+        # Therapists require admin verification before they become active.
         user_data["status"] = "PENDING"
         # Therapists apply without a password. Store a random placeholder that is
         # never emailed — the admin approval step replaces it with a real
@@ -232,13 +239,17 @@ async def signup(
     # normal pages, but they need a token to complete onboarding.
     if role_val == "THERAPIST":
         background_tasks.add_task(send_application_received_email, user.email, user.name)
-        token = create_access_token(user.id, role=user.role)
+        token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
         return TokenResponse(
             access_token=token,
             user=await _user_with_photo(db, user),
         )
 
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
 
     return TokenResponse(
         access_token=token,
@@ -264,7 +275,9 @@ async def login(data: LoginRequest, db: Prisma = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
         )
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),
@@ -360,8 +373,32 @@ async def change_password(
     )
 
 
+@router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    data: DeleteAccountRequest,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    if data.password:
+        if not verify_password(data.password, current_user.password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect",
+            )
+    await db.user.delete(where={"id": current_user.id})
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout():
+    return None
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all_devices(
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    await bump_token_version(db, current_user.id)
     return None
 
 
@@ -397,7 +434,9 @@ async def google_auth(
             detail=detail,
         )
 
-    token = create_access_token(user.id, role=user.role)
+    token = create_access_token(
+        user.id, role=user.role, token_version=user.tokenVersion or 0
+    )
     return TokenResponse(
         access_token=token,
         user=await _user_with_photo(db, user),

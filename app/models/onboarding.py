@@ -21,6 +21,7 @@ class OnboardingCompleteRequest(BaseModel):
     emergencyName: str | None = None
     emergencyRelation: str | None = None
     emergencyPhone: str | None = None
+    password: str | None = None
 
 
 class ApplicationSectionFeedback(BaseModel):

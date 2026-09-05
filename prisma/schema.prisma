@@ -89,6 +89,7 @@ model User {
   specialty     String?
   status        UserStatus @default(PENDING)
   mustChangePassword Boolean @default(false)
+  tokenVersion  Int       @default(0)
   referralCode  String?
 
   /// Raw code as typed at signup, kept even if the code is later reissued.
@@ -111,6 +112,7 @@ model User {
   cartItems   CartItem[]
   payments    Payment[]
   refunds     Refund[]     @relation("PatientRefunds")
+  activityLogs ActivityLog[]
   notifications Notification[]
 
   @@index([role])
@@ -214,6 +216,7 @@ model Therapist {
   availabilityBlocks AvailabilityBlock[]
   auditLogEntries  AuditLogEntry[]
   blockRequests ScheduleBlockRequest[]
+  rateChangeRequests RateChangeRequest[]
   serviceAreas TherapistServiceArea[]
   verifications Verification[]
   applicationFeedbacks TherapistApplicationFeedback[]
@@ -292,6 +295,7 @@ model Session {
   @@index([patientId, status])
   @@index([therapistId, status])
   @@index([therapistId, date])
+  @@unique([therapistId, date, time])
 }
 
 model Review {
@@ -508,6 +512,23 @@ model ScheduleBlockRequest {
   @@index([therapistId, status])
 }
 
+model RateChangeRequest {
+  id          String   @id @default(cuid())
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  rateFrom    Float
+  rateTo      Float
+  reason      String
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  adminNotes  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([therapistId])
+  @@index([status])
+  @@index([therapistId, status])
+}
+
 enum CaseSource {
   PATIENT_SUBMITTED
   THERAPIST_SUBMITTED
@@ -624,6 +645,8 @@ model ActivityLog {
   metadata   Json?
   createdAt  DateTime @default(now())
 
+  admin User @relation(fields: [adminId], references: [id])
+
   @@index([adminId])
   @@index([targetType, targetId])
   @@index([createdAt])
@@ -713,4 +736,22 @@ model TherapistApplicationFeedback {
   createdAt   DateTime @default(now())
 
   @@index([therapistId])
+}
+
+model AdminNotification {
+  id               String    @id @default(cuid())
+  category         String
+  message          String
+  read             Boolean   @default(false)
+  readAt           DateTime?
+  actionType       String?
+  actionId         String?
+  relatedEntityType String?
+  relatedEntityId  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([category])
+  @@index([read])
+  @@index([createdAt])
 }

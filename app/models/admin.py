@@ -85,6 +85,10 @@ class AdminTherapistUpdate(BaseModel):
     email: str | None = None
     status: str | None = None
     isActive: bool | None = None
+    gender: str | None = None
+    price: float | None = None
+    experience: int | None = None
+    bio: str | None = None
 
     # Whether the therapist can be booked, where they work from, and how far
     # they travel. Admin-only by virtue of the route.

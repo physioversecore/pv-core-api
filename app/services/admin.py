@@ -42,6 +42,7 @@ async def get_admin_therapists(
         where["OR"] = [
             {"name": {"contains": search, "mode": "insensitive"}},
             {"email": {"contains": search, "mode": "insensitive"}},
+            {"phone": {"contains": search, "mode": "insensitive"}},
         ]
 
     if specialty:
@@ -197,10 +198,14 @@ async def update_admin_therapist(db: Prisma, key: str, data: dict):
     therapist_fields = {}
     user_fields = {}
 
-    for field in ("name", "city", "specialty"):
+    for field in ("name", "city", "specialty", "gender", "bio"):
         if field in data and data[field] is not None:
             therapist_fields[field] = data[field]
 
+    if "price" in data and data["price"] is not None:
+        therapist_fields["price"] = float(data["price"])
+    if "experience" in data and data["experience"] is not None:
+        therapist_fields["experience"] = int(data["experience"])
     # Coverage and listing. Passed straight through: this route is already
     # admin-gated, so there is no per-field authorisation to repeat here.
     for field in (
@@ -313,6 +318,7 @@ async def get_admin_patients(
         where["OR"] = [
             {"name": {"contains": search, "mode": "insensitive"}},
             {"email": {"contains": search, "mode": "insensitive"}},
+            {"phone": {"contains": search, "mode": "insensitive"}},
         ]
 
     if city:

@@ -1,65 +1,106 @@
-"""Per-user notification feed.
+from datetime import datetime, timezone
 
-Separate from `app.services.email.notifications`, which sends email. This is
-the in-app feed the mobile client renders.
-"""
 from prisma import Prisma
 
 
-async def create_notification(
+ACTION_MAP = {
+    "booking": ("View booking", "/admin/bookings", "booking"),
+    "reschedule": ("View schedule", "/admin/bookings", "booking"),
+    "complaint": ("Review complaint", "/admin/complaints", "complaint"),
+    "payment": ("View payments", "/admin/payments", "payment"),
+    "refund": ("View refunds", "/admin/refunds", "refund"),
+    "leave": ("View leaves", "/admin/leave", "leave"),
+    "verification": ("Review application", "/admin/verification", "verification"),
+    "therapist": ("Review therapist", "/admin/therapists", "therapist"),
+    "system": (None, None, None),
+}
+
+
+async def log_admin_notification(
     db: Prisma,
-    user_id: str,
     *,
-    type: str,
-    title: str,
-    body: str,
-    ref_type: str | None = None,
-    ref_id: str | None = None,
-):
-    return await db.notification.create(
-        data={
-            "userId": user_id,
-            "type": type,
-            "title": title,
-            "body": body,
-            "refType": ref_type,
-            "refId": ref_id,
-        }
+    category: str,
+    message: str,
+    action_type: str | None = None,
+    action_id: str | None = None,
+) -> None:
+    """Create an admin notification. Fire-and-forget safe — catches and logs errors."""
+    try:
+        await db.adminnotification.create(
+            data={
+                "category": category,
+                "message": message,
+                "read": False,
+                "actionType": action_type,
+                "actionId": action_id,
+                "relatedEntityType": ACTION_MAP.get(category, (None, None, None))[2],
+                "relatedEntityId": action_id,
+                "createdAt": datetime.now(timezone.utc),
+            }
+        )
+    except Exception:
+        pass
+
+
+def _build_response(n) -> dict:
+    action_label, action_href, _ = ACTION_MAP.get(
+        n.category, (None, None, None)
     )
+    return {
+        "id": n.id,
+        "category": n.category,
+        "message": n.message,
+        "timestamp": n.createdAt.isoformat() if n.createdAt else "",
+        "read": n.read,
+        "actionLabel": action_label,
+        "actionHref": action_href,
+        "relatedEntityType": n.relatedEntityType,
+        "relatedEntityId": n.relatedEntityId,
+    }
 
 
-async def list_notifications(db: Prisma, user_id: str, skip=0, limit=50):
-    where = {"userId": user_id}
-    items = await db.notification.find_many(
-        where=where, skip=skip, take=limit, order={"createdAt": "desc"}
+async def list_admin_notifications(
+    db: Prisma,
+    *,
+    skip: int = 0,
+    limit: int = 20,
+    category: str | None = None,
+    read: bool | None = None,
+) -> tuple[list[dict], int, int]:
+    """Return (items, total, unread_count)."""
+    where: dict = {}
+    if category:
+        where["category"] = category
+    if read is not None:
+        where["read"] = read
+
+    total = await db.adminnotification.count(where=where)
+    unread_count = await db.adminnotification.count(where={"read": False})
+
+    items = await db.adminnotification.find_many(
+        where=where,
+        order={"createdAt": "desc"},
+        skip=skip,
+        take=limit,
     )
-    total = await db.notification.count(where=where)
-    unread = await db.notification.count(where={**where, "readAt": None})
-    return items, total, unread
+    return [_build_response(n) for n in items], total, unread_count
 
 
-async def mark_read(db: Prisma, user_id: str, notification_id: str):
-    """Scoped by user so one account cannot mark another's notification."""
-    from datetime import datetime, timezone
-
-    found = await db.notification.find_first(
-        where={"id": notification_id, "userId": user_id}
-    )
-    if not found:
+async def mark_notification_read(db: Prisma, notification_id: str) -> dict | None:
+    n = await db.adminnotification.find_unique(where={"id": notification_id})
+    if not n:
         return None
-    if found.readAt is not None:
-        return found
-    return await db.notification.update(
+    updated = await db.adminnotification.update(
         where={"id": notification_id},
-        data={"readAt": datetime.now(timezone.utc)},
+        data={"read": True, "readAt": datetime.now(timezone.utc)},
     )
+    return _build_response(updated)
 
 
-async def mark_all_read(db: Prisma, user_id: str) -> int:
-    from datetime import datetime, timezone
-
-    result = await db.notification.update_many(
-        where={"userId": user_id, "readAt": None},
-        data={"readAt": datetime.now(timezone.utc)},
+async def mark_all_notifications_read(db: Prisma) -> int:
+    unread = await db.adminnotification.count(where={"read": False})
+    await db.adminnotification.update_many(
+        where={"read": False},
+        data={"read": True, "readAt": datetime.now(timezone.utc)},
     )
-    return result
+    return unread

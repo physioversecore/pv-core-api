@@ -55,6 +55,11 @@ async def process_booking_payment(
             },
         )
     except ValueError as e:
+        if str(e) == "CONFLICT":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That time slot was just booked — please choose another.",
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     payment = await create_payment(
@@ -73,6 +78,15 @@ async def process_booking_payment(
             "billingCountry": data.billingCountry,
             "status": "COMPLETED",
         },
+    )
+
+    from app.services.notification import log_admin_notification
+    await log_admin_notification(
+        db,
+        category="payment",
+        message=f"Payment of Rs {data.fee + data.platformFee:,.0f} processed via {data.paymentMethod}",
+        action_type="payment",
+        action_id=payment.id,
     )
 
     return BookingPaymentResponse(

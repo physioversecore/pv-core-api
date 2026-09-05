@@ -69,6 +69,7 @@ MOCK_PATIENT = SimpleNamespace(
     specialty=None,
     status="APPROVED",
     referralCode="SAHA-TEST1234",
+    tokenVersion=0,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -84,6 +85,7 @@ MOCK_THERAPIST_USER = SimpleNamespace(
     specialty="Physiotherapy",
     status="APPROVED",
     referralCode=None,
+    tokenVersion=0,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -99,6 +101,7 @@ MOCK_ADMIN = SimpleNamespace(
     specialty=None,
     status="APPROVED",
     referralCode=None,
+    tokenVersion=0,
     createdAt=NOW,
     updatedAt=NOW,
 )
@@ -225,7 +228,7 @@ MOCK_NOTIFICATION = SimpleNamespace(
     createdAt=datetime(2026, 9, 1, 9, 0),
 )
 
-TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "notification"]
+TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification", "notification", "pointtransaction", "clinic", "therapistservicearea", "setting"]
 METHODS = [
     "find_unique",
     "find_many",
