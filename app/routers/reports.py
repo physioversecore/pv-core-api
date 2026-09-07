@@ -17,15 +17,14 @@ from app import (
     get_reports_for_patient,
     get_reports_for_therapist,
     pagination_params,
+    settings,
     update_report,
 )
+from app.upload_utils import validate_upload_file, write_upload_file
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-REPORTS_ROOT = Path(__file__).resolve().parent.parent.parent / "Upload" / "Reports"
-
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx"}
+REPORTS_ROOT = Path(settings.upload_dir).resolve() / "Reports"
 
 
 def _sanitize_id(value: str) -> str:
@@ -38,25 +37,19 @@ def _sanitize_id(value: str) -> str:
 async def _save_files(patient_id: str, files: list[UploadFile]) -> list[str]:
     patient_id = _sanitize_id(patient_id)
     patient_dir = REPORTS_ROOT / patient_id
-    patient_dir.mkdir(parents=True, exist_ok=True)
+    patient_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     urls: list[str] = []
     for f in files:
-        ext = Path(f.filename or "file").suffix.lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed")
-
+        original = f.filename or "file"
         content = await f.read()
-        if len(content) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail="File exceeds 10MB limit")
+        ext, content = validate_upload_file(original, content)
 
         filename = f"{uuid.uuid4().hex}{ext}"
         dest = patient_dir / filename
 
-        with open(dest, "wb") as out:
-            out.write(content)
+        write_upload_file(dest, content)
 
-        original = f.filename or f"file{ext}"
         size = len(content)
         urls.append(f"/api/v1/uploads/{patient_id}/{filename}?name={original}&size={size}")
 

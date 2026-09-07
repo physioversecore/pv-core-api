@@ -32,6 +32,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - uploads_data:/app/Upload
     command: >
       sh -c "uv run prisma db push && python main.py"
     restart: unless-stopped
@@ -56,4 +58,6 @@ volumes:
   redis-data:
       driver: local
   pgdata:
+    driver: local
+  uploads_data:
     driver: local
