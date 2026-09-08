@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
+    upload_dir: str = "./Upload"
+
     class Config:
         env_file = ".env"
 

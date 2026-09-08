@@ -2,27 +2,27 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
-from fastapi.responses import FileResponse
 from prisma import Prisma
 from prisma.enums import Role
 
 from app import get_current_user, get_db, settings
 from app.database import db
+from app.upload_utils import (
+    serve_upload_response,
+    validate_upload_file,
+    write_upload_file,
+)
 from jose import JWTError, jwt
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
-UPLOAD_ROOT = Path(__file__).resolve().parent.parent.parent / "Upload"
+UPLOAD_ROOT = Path(settings.upload_dir).resolve()
 REPORTS_ROOT = UPLOAD_ROOT / "Reports"
 THERAPISTS_ROOT = UPLOAD_ROOT / "Therapists"
 PATIENTS_ROOT = UPLOAD_ROOT / "Patients"
 APPLICATIONS_ROOT = UPLOAD_ROOT / "TherapistApplications"
 EVIDENCE_ROOT = UPLOAD_ROOT / "ComplaintEvidence"
 
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
-# Images and PDFs only — no doc/docx uploads.
-ALLOWED_REPORT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
-ALLOWED_THERAPIST_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"}
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
@@ -31,13 +31,6 @@ def _sanitize_id(value: str) -> str:
     if safe != value or ".." in value or "/" in value or "\\" in value:
         raise HTTPException(status_code=400, detail="Invalid ID format")
     return safe
-
-
-def _validate_filename(filename: str) -> str:
-    ext = Path(filename).suffix.lower()
-    if ext not in ALLOWED_REPORT_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed")
-    return ext
 
 
 def _validate_photo_extension(filename: str) -> str:
@@ -75,11 +68,6 @@ async def _resolve_therapist(db: Prisma, key: str):
     return therapist
 
 
-def _validate_upload_size(content: bytes) -> None:
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail=f"File exceeds maximum size of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
-
-
 def _validate_application_session(session: str) -> str:
     safe = _sanitize_id(session)
     if len(safe) < 8 or len(safe) > 128:
@@ -98,19 +86,16 @@ async def upload_therapist_application(
     session = _validate_application_session(session or "therapist-application")
 
     app_dir = APPLICATIONS_ROOT / session
-    app_dir.mkdir(parents=True, exist_ok=True)
+    app_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     uploaded: list[dict] = []
     for f in files:
-        ext = _validate_filename(f.filename or "file")
+        content = await f.read()
+        ext, content = validate_upload_file(f.filename or "file", content)
         filename = f"{uuid.uuid4().hex}{ext}"
         dest = app_dir / filename
 
-        content = await f.read()
-        _validate_upload_size(content)
-
-        with open(dest, "wb") as out:
-            out.write(content)
+        write_upload_file(dest, content)
 
         uploaded.append(
             {
@@ -138,9 +123,7 @@ async def serve_application_file(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    import mimetypes
-    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    return FileResponse(str(file_path), media_type=media_type)
+    return serve_upload_response(file_path, filename)
 
 
 @router.get("/{patient_id}/{filename}")
@@ -179,9 +162,7 @@ async def serve_file(
     if user.role == Role.PATIENT and user.id != patient_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    import mimetypes
-    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    return FileResponse(str(file_path), media_type=media_type)
+    return serve_upload_response(file_path, filename)
 
 
 @router.get("/therapists/{therapist_id}/{filename}")
@@ -199,9 +180,7 @@ async def serve_therapist_file(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    import mimetypes
-    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    return FileResponse(str(file_path), media_type=media_type)
+    return serve_upload_response(file_path, filename)
 
 
 @router.post("/therapists/{therapist_id}")
@@ -221,20 +200,16 @@ async def upload_therapist_file(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     therapist_dir = THERAPISTS_ROOT / therapist.id
-    therapist_dir.mkdir(parents=True, exist_ok=True)
+    therapist_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     urls: list[str] = []
     for f in files:
-        ext = Path(f.filename or "file").suffix
+        content = await f.read()
+        ext, content = validate_upload_file(f.filename or "file", content)
         filename = f"{uuid.uuid4().hex}{ext}"
         dest = therapist_dir / filename
 
-        content = await f.read()
-        _validate_upload_size(content)
-        _validate_filename(f.filename or "file")
-
-        with open(dest, "wb") as out:
-            out.write(content)
+        write_upload_file(dest, content)
 
         original = f.filename or f"file{ext}"
         size = len(content)
@@ -289,20 +264,17 @@ async def upload_therapist_documents(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     therapist_dir = THERAPISTS_ROOT / therapist.id
-    therapist_dir.mkdir(parents=True, exist_ok=True)
+    therapist_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     created: list[dict] = []
     for f in files:
         original = f.filename or "file"
-        ext = _validate_filename(original)
+        content = await f.read()
+        ext, content = validate_upload_file(original, content)
         filename = f"{uuid.uuid4().hex}{ext}"
         dest = therapist_dir / filename
 
-        content = await f.read()
-        _validate_upload_size(content)
-
-        with open(dest, "wb") as out:
-            out.write(content)
+        write_upload_file(dest, content)
 
         url = f"/api/v1/uploads/therapists/{therapist.id}/{filename}?name={original}&size={len(content)}"
 
@@ -348,18 +320,17 @@ async def upload_therapist_photo(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     original = file.filename or "photo"
-    ext = _validate_photo_extension(original)
+    _validate_photo_extension(original)
 
     content = await file.read()
-    _validate_upload_size(content)
+    ext, content = validate_upload_file(original, content)
 
     therapist_dir = THERAPISTS_ROOT / therapist.id
-    therapist_dir.mkdir(parents=True, exist_ok=True)
+    therapist_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     filename = f"photo-{uuid.uuid4().hex}{ext}"
     dest = therapist_dir / filename
-    with open(dest, "wb") as out:
-        out.write(content)
+    write_upload_file(dest, content)
 
     url = f"/api/v1/uploads/therapists/{therapist.id}/{filename}?name={original}&size={len(content)}"
 
@@ -441,13 +412,13 @@ async def upload_patient_photo(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     original = file.filename or "photo"
-    ext = _validate_photo_extension(original)
+    _validate_photo_extension(original)
 
     content = await file.read()
-    _validate_upload_size(content)
+    ext, content = validate_upload_file(original, content)
 
     patient_dir = PATIENTS_ROOT / profile.id
-    patient_dir.mkdir(parents=True, exist_ok=True)
+    patient_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     # Remove old photo if exists
     if profile.photo:
@@ -458,8 +429,7 @@ async def upload_patient_photo(
 
     filename = f"photo-{uuid.uuid4().hex}{ext}"
     dest = patient_dir / filename
-    with open(dest, "wb") as out:
-        out.write(content)
+    write_upload_file(dest, content)
 
     url = f"/api/v1/uploads/patients/{profile.id}/{filename}?name={original}&size={len(content)}"
 
@@ -521,9 +491,7 @@ async def serve_patient_file(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    import mimetypes
-    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    return FileResponse(str(file_path), media_type=media_type)
+    return serve_upload_response(file_path, filename)
 
 
 # ---------------------------------------------------------------------------
@@ -541,19 +509,16 @@ async def upload_complaint_evidence(
     session = _validate_application_session(session or "complaint-evidence")
 
     evidence_dir = EVIDENCE_ROOT / session
-    evidence_dir.mkdir(parents=True, exist_ok=True)
+    evidence_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     uploaded: list[dict] = []
     for f in files:
-        ext = _validate_filename(f.filename or "file")
+        content = await f.read()
+        ext, content = validate_upload_file(f.filename or "file", content)
         filename = f"{uuid.uuid4().hex}{ext}"
         dest = evidence_dir / filename
 
-        content = await f.read()
-        _validate_upload_size(content)
-
-        with open(dest, "wb") as out:
-            out.write(content)
+        write_upload_file(dest, content)
 
         uploaded.append(
             {
@@ -582,6 +547,4 @@ async def serve_evidence_file(
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    import mimetypes
-    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    return FileResponse(str(file_path), media_type=media_type)
+    return serve_upload_response(file_path, filename)
