@@ -168,6 +168,7 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
         where={"therapistId": therapist.id},
     )
     total_patients = len({s.patientId for s in all_sessions})
+    package_sessions = len([s for s in all_sessions if s.packagePurchaseId])
 
     completed_this_month = await db.session.find_many(
         where={
@@ -187,7 +188,7 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
             "date": {"gte": today, "lt": today_end},
             "status": {"in": ["SCHEDULED", "IN_PROGRESS"]},
         },
-        include={"patient": True},
+        include={"patient": True, "packagePurchase": {"include": {"package": True}}},
         order={"time": "asc"},
     )
 
@@ -200,6 +201,8 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
             "address": s.address or "",
             "type": s.type,
             "status": "Confirmed" if s.status == "SCHEDULED" else "Pending",
+            "bookedViaPackage": s.packagePurchase is not None,
+            "packageName": s.packagePurchase.package.name if s.packagePurchase and s.packagePurchase.package else None,
         }
         for s in today_sessions_raw
     ]
@@ -249,6 +252,7 @@ async def get_therapist_dashboard(db: Prisma, user_id: str):
         "name": user.name or "Therapist",
         "sessionsThisWeek": sessions_this_week,
         "totalPatients": total_patients,
+        "packageSessions": package_sessions,
         "earningsThisMonth": earnings,
         "averageRating": therapist.rating or 0.0,
         "todaySessions": today_sessions,

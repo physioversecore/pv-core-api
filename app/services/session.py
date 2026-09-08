@@ -15,6 +15,14 @@ def _enrich_session(s):
         member = getattr(s, "familyMember", None)
         d["familyMemberId"] = getattr(s, "familyMemberId", None)
         d["familyMemberName"] = member.name if member and member.name else None
+        purchase = getattr(s, "packagePurchase", None)
+        d["bookedViaPackage"] = purchase is not None
+        d["packagePurchaseId"] = getattr(s, "packagePurchaseId", None)
+        if purchase is not None:
+            pkg = getattr(purchase, "package", None)
+            d["packageName"] = pkg.name if pkg else None
+        else:
+            d["packageName"] = None
         return d
     except Exception:
         return {"id": getattr(s, "id", ""), "therapistName": "", "patientName": "", "patientPhone": ""}
@@ -64,7 +72,7 @@ async def is_slot_booked(
     }
     if exclude_session_id:
         where["id"] = {"not": exclude_session_id}
-    existing = await db.session.find_many(where=where, select={"id": True})
+    existing = await db.session.find_many(where=where, take=1)
     return len(existing) > 0
 
 
@@ -76,6 +84,25 @@ async def create_session(db: Prisma, data: dict):
         raise ValueError("Invalid family member")
     if await is_slot_booked(db, data["therapistId"], data["date"], data["time"]):
         raise ValueError("CONFLICT")
+
+    package_purchase_id = data.get("packagePurchaseId")
+    if package_purchase_id:
+        from app.services.package_purchase import get_active_purchase, deduct_session
+
+        purchase = await db.packagepurchase.find_unique(
+            where={"id": package_purchase_id},
+            include={"package": True},
+        )
+        if not purchase or purchase.userId != data["patientId"]:
+            raise ValueError("Invalid package purchase")
+        if purchase.status != "ACTIVE":
+            raise ValueError("PACKAGE_NOT_ACTIVE")
+        if purchase.sessionsUsed >= purchase.sessionsTotal:
+            raise ValueError("PACKAGE_DEPLETED")
+        active = await get_active_purchase(db, data["patientId"])
+        if not active or active["id"] != package_purchase_id:
+            raise ValueError("PACKAGE_NOT_ACTIVE")
+
     create_data = {
         "therapistId": data["therapistId"],
         "patientId": data["patientId"],
@@ -83,14 +110,19 @@ async def create_session(db: Prisma, data: dict):
         "time": data["time"],
         "type": data.get("type", "HOME_VISIT"),
         "address": data["address"],
-        "fee": data["fee"],
+        "fee": 0 if package_purchase_id else data["fee"],
         "notes": data.get("notes"),
     }
+    if package_purchase_id:
+        create_data["packagePurchaseId"] = package_purchase_id
     if family_member:
         create_data["familyMemberId"] = family_member.id
     session = await db.session.create(
-        data=create_data, include={"therapist": True, "familyMember": True}
+        data=create_data,
+        include={"therapist": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}},
     )
+    if package_purchase_id:
+        await deduct_session(db, package_purchase_id)
     return _enrich_session(session)
 
 
@@ -100,7 +132,7 @@ async def get_sessions_for_patient(db: Prisma, patient_id: str, skip=0, limit=10
         skip=skip,
         take=limit,
         order={"createdAt": "desc"},
-        include={"therapist": True, "familyMember": True},
+        include={"therapist": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}},
     )
     total = await db.session.count(where={"patientId": patient_id})
     return _enrich_sessions(sessions), total
@@ -112,7 +144,7 @@ async def get_sessions_for_therapist(db: Prisma, therapist_id: str, skip=0, limi
         skip=skip,
         take=limit,
         order={"date": "asc"},
-        include={"therapist": True, "patient": True, "familyMember": True},
+        include={"therapist": True, "patient": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}},
     )
     total = await db.session.count(where={"therapistId": therapist_id})
     return _enrich_sessions(sessions), total
@@ -121,23 +153,28 @@ async def get_sessions_for_therapist(db: Prisma, therapist_id: str, skip=0, limi
 async def get_all_sessions(db: Prisma, skip=0, limit=100):
     sessions = await db.session.find_many(
         skip=skip, take=limit, order={"createdAt": "desc"},
-        include={"therapist": True, "familyMember": True},
+        include={"therapist": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}},
     )
     total = await db.session.count()
     return _enrich_sessions(sessions), total
 
 
 async def get_session(db: Prisma, session_id: str):
-    session = await db.session.find_unique(where={"id": session_id}, include={"therapist": True, "familyMember": True})
+    session = await db.session.find_unique(where={"id": session_id}, include={"therapist": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}})
     return _enrich_session(session) if session else None
 
 
 async def update_session(db: Prisma, session_id: str, data: dict):
-    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True, "patient": True, "familyMember": True})
+    session = await db.session.update(where={"id": session_id}, data=data, include={"therapist": True, "patient": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}})
     return _enrich_session(session)
 
 
 async def delete_session(db: Prisma, session_id: str):
+    session = await db.session.find_unique(where={"id": session_id})
+    if session and session.packagePurchaseId:
+        from app.services.package_purchase import restore_session
+
+        await restore_session(db, session.packagePurchaseId)
     await db.session.delete(where={"id": session_id})
 
 
@@ -147,7 +184,8 @@ async def reschedule_session(
     from datetime import datetime as dt
 
     session = await db.session.find_unique(
-        where={"id": session_id}, include={"therapist": True, "familyMember": True}
+        where={"id": session_id},
+        include={"therapist": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}},
     )
     if not session:
         return None, "Session not found"
@@ -184,6 +222,6 @@ async def reschedule_session(
     updated = await db.session.update(
         where={"id": session_id},
         data={"date": dt.strptime(new_date, "%Y-%m-%d"), "time": new_time},
-        include={"therapist": True, "patient": True, "familyMember": True},
+        include={"therapist": True, "patient": True, "familyMember": True, "packagePurchase": {"include": {"package": True}}},
     )
     return _enrich_session(updated), None

@@ -11,6 +11,7 @@ class SessionCreate(BaseModel):
     fee: float = Field(ge=0, le=1000000)
     familyMemberId: str | None = Field(default=None, max_length=64)
     notes: str | None = Field(default=None, max_length=2000)
+    packagePurchaseId: str | None = Field(default=None, max_length=64)
 
 
 class SessionUpdate(BaseModel):
@@ -36,6 +37,9 @@ class SessionResponse(BaseModel):
     address: str
     fee: float
     notes: str | None = None
+    bookedViaPackage: bool = False
+    packageName: str | None = None
+    packagePurchaseId: str | None = None
     createdAt: datetime
     updatedAt: datetime
 

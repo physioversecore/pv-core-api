@@ -6,6 +6,7 @@ from app.services.email.dispatch import dispatch_email
 APPLICATION_RECEIVED_TEMPLATE_PATH = "app/templates/application_received.html"
 ACCOUNT_VERIFIED_TEMPLATE_PATH = "app/templates/account_verified.html"
 APPLICATION_REJECTED_TEMPLATE_PATH = "app/templates/application_rejected.html"
+PACKAGE_PURCHASED_TEMPLATE_PATH = "app/templates/package_purchased.html"
 
 
 def _first_name(name: str) -> str:
@@ -116,4 +117,53 @@ async def send_application_rejected_email(email: str, name: str = "", reason: st
         to=email,
         subject=f"Update on your {settings.smtp_from_name} application",
         html=_render_application_rejected_email(name, reason),
+    )
+
+
+def _render_package_purchased_email(
+    name: str,
+    package_name: str,
+    session_count: int,
+    validity_days: int,
+    amount: str,
+) -> str:
+    with open(PACKAGE_PURCHASED_TEMPLATE_PATH) as f:
+        tmpl = Template(f.read())
+
+    return tmpl.render(
+        brand_name="Sahayatri Physio",
+        tagline="Your physiotherapy recovery partner",
+        title=f"Your {package_name} package is active",
+        name=_first_name(name),
+        body_line1=f"Your {package_name} package has been activated. You can now book sessions with any of our verified physiotherapists and your sessions will be covered by this package.",
+        package_label="Package activated",
+        package_name=package_name,
+        sessions_label="Total sessions",
+        session_count=str(session_count),
+        valid_label="Valid for",
+        validity=f"{validity_days} days",
+        amount_label="Amount paid",
+        amount=amount,
+        body_line2="Book your first session from your patient dashboard. Each completed booking deducts one session from your package.",
+        body_line3="If you have any questions, please contact our support team.",
+        body_line4=f"You can view your remaining sessions from the Packages section in your patient dashboard.",
+        footer_line1="Sahayatri Physio — Home-visit physiotherapy in Nepal.",
+        footer_line2="This is an automated message, please do not reply.",
+    )
+
+
+async def send_package_purchased_email(
+    email: str,
+    name: str = "",
+    package_name: str = "",
+    session_count: int = 0,
+    validity_days: int = 0,
+    amount: str = "",
+) -> None:
+    await dispatch_email(
+        to=email,
+        subject=f"Your {settings.smtp_from_name} package is now active",
+        html=_render_package_purchased_email(
+            name, package_name, session_count, validity_days, amount
+        ),
     )

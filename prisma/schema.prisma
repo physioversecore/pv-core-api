@@ -80,6 +80,7 @@ model User {
   cartItems   CartItem[]
   payments    Payment[]
   refunds     Refund[]     @relation("PatientRefunds")
+  packagePurchases PackagePurchase[]
   activityLogs ActivityLog[]
 
   @@index([role])
@@ -232,6 +233,8 @@ model Session {
   address         String
   fee             Float
   notes           String?
+  packagePurchaseId String?
+  packagePurchase   PackagePurchase? @relation(fields: [packagePurchaseId], references: [id], onDelete: SetNull)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -244,6 +247,7 @@ model Session {
   @@index([patientId, status])
   @@index([therapistId, status])
   @@index([therapistId, date])
+  @@index([packagePurchaseId])
   @@unique([therapistId, date, time])
 }
 
@@ -300,6 +304,8 @@ model Payment {
   billingCountry String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  packagePurchase PackagePurchase?
 
   @@index([userId])
   @@index([sessionId])
@@ -588,21 +594,48 @@ model Clinic {
 }
 
 model Package {
-  id        String   @id @default(cuid())
-  name      String
-  tag       String
-  icon      String   @default("Brain")
-  price     Int
-  cadence   String
-  blurb     String
-  points    String[]
-  featured  Boolean  @default(false)
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  tag          String
+  icon         String   @default("Brain")
+  price        Int
+  cadence      String
+  blurb        String
+  points       String[]
+  sessionCount Int      @default(10)
+  validityDays Int      @default(30)
+  featured     Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  purchases PackagePurchase[]
 
   @@index([isActive])
+}
+
+model PackagePurchase {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packageId       String
+  package         Package  @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  paymentId       String?  @unique
+  payment         Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  sessionsTotal   Int
+  sessionsUsed    Int      @default(0)
+  status          String   @default("ACTIVE")
+  purchasedAt     DateTime @default(now())
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sessions Session[]
+
+  @@index([userId])
+  @@index([packageId])
+  @@index([userId, status])
 }
 
 model TherapistApplicationFeedback {

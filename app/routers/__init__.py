@@ -17,4 +17,6 @@ from app.routers.uploads import router as uploads_router
 from app.routers.patients import router as patients_router
 from app.routers.clinics import router as clinics_router
 from app.routers.packages import router as packages_router
+from app.routers.package_purchases import router as package_purchases_router
+from app.routers.package_purchases import admin_router as admin_packages_router
 from app.routers.rate_change import router as rate_change_router

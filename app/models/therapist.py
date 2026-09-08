@@ -98,6 +98,8 @@ class TodaySessionData(BaseModel):
     address: str
     type: str
     status: str
+    bookedViaPackage: bool = False
+    packageName: str | None = None
 
 
 class RecentUploadData(BaseModel):
@@ -129,6 +131,7 @@ class TherapistDashboardResponse(BaseModel):
     name: str
     sessionsThisWeek: int
     totalPatients: int
+    packageSessions: int = 0
     earningsThisMonth: float
     averageRating: float
     todaySessions: list[TodaySessionData]

@@ -50,6 +50,7 @@ async def book_session(
                 "fee": data.fee,
                 "familyMemberId": data.familyMemberId,
                 "notes": data.notes,
+                "packagePurchaseId": data.packagePurchaseId,
             },
         )
     except ValueError as e:
@@ -57,6 +58,16 @@ async def book_session(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="That time slot was just booked — please choose another.",
+            )
+        if str(e) == "PACKAGE_NOT_ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Your package is not active. Please check your package balance.",
+            )
+        if str(e) == "PACKAGE_DEPLETED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Your package has no remaining sessions. Please book with a new package or pay per session.",
             )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return SessionResponse.model_validate(session)
@@ -151,6 +162,12 @@ async def update_session_by_id(
     if new_status:
         from app.services.notification import log_admin_notification
         from app.services.session import _enrich_session
+
+        if new_status == "CANCELLED" and session.packagePurchaseId:
+            from app.services.package_purchase import restore_session
+
+            await restore_session(db, session.packagePurchaseId)
+
         enriched = _enrich_session(session) if not hasattr(session, "patient") else session
         patient_name = enriched.get("patient", {}).get("name", "Unknown") if isinstance(enriched.get("patient"), dict) else getattr(getattr(session, "patient", None), "name", "Unknown")
         therapist_name = enriched.get("therapist", {}).get("name", "Unknown") if isinstance(enriched.get("therapist"), dict) else getattr(getattr(session, "therapist", None), "name", "Unknown")

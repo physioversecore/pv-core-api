@@ -20,6 +20,7 @@ from app.rate_limit.metrics import MetricsCollector
 from app.rate_limit.middleware import RateLimitMiddleware
 
 from app.routers import (
+    admin_packages_router,
     admin_router,
     admin_extras_router,
     auth_router,
@@ -27,6 +28,7 @@ from app.routers import (
     cart_router,
     clinics_router,
     earnings_router,
+    package_purchases_router,
     packages_router,
     patients_router,
     payments_router,
@@ -141,7 +143,9 @@ app.include_router(settings_router, prefix="/api/v1")
 app.include_router(availability_router, prefix="/api/v1")
 app.include_router(service_router, prefix="/api/v1")
 app.include_router(clinics_router, prefix="/api/v1")
+app.include_router(package_purchases_router, prefix="/api/v1")
 app.include_router(packages_router, prefix="/api/v1")
+app.include_router(admin_packages_router, prefix="/api/v1")
 app.include_router(rate_change_router, prefix="/api/v1")
 
 

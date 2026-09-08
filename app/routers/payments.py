@@ -52,6 +52,7 @@ async def process_booking_payment(
                 "fee": data.fee,
                 "familyMemberId": data.familyMemberId,
                 "notes": data.notes,
+                "packagePurchaseId": data.packagePurchaseId,
             },
         )
     except ValueError as e:
@@ -60,7 +61,23 @@ async def process_booking_payment(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="That time slot was just booked — please choose another.",
             )
+        if str(e) == "PACKAGE_NOT_ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Your package is not active. Please check your package balance.",
+            )
+        if str(e) == "PACKAGE_DEPLETED":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Your package has no remaining sessions. Please book with a new package or pay per session.",
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    if data.packagePurchaseId:
+        return BookingPaymentResponse(
+            session=SessionPaymentResponse.model_validate(session),
+            payment=None,
+        )
 
     payment = await create_payment(
         db,

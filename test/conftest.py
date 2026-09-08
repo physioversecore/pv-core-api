@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -21,6 +21,9 @@ from app.routers import (
     sessions_router,
     therapists_router,
     uploads_router,
+    packages_router,
+    package_purchases_router,
+    admin_packages_router,
 )
 
 
@@ -48,6 +51,9 @@ _test_app.include_router(admin_router, prefix="/api/v1")
 _test_app.include_router(reports_router, prefix="/api/v1")
 _test_app.include_router(reviews_router, prefix="/api/v1")
 _test_app.include_router(uploads_router, prefix="/api/v1")
+_test_app.include_router(package_purchases_router, prefix="/api/v1")
+_test_app.include_router(admin_packages_router, prefix="/api/v1")
+_test_app.include_router(packages_router, prefix="/api/v1")
 
 
 @_test_app.get("/health")
@@ -55,6 +61,7 @@ async def health():
     return {"status": "ok"}
 
 NOW = datetime(2024, 6, 15, 10, 30, 0)
+FUTURE_AWARE = datetime.now(timezone.utc) + timedelta(days=30)
 
 MOCK_PATIENT = SimpleNamespace(
     id="patient-1",
@@ -172,6 +179,38 @@ MOCK_PAYMENT = SimpleNamespace(
     updatedAt=NOW,
 )
 
+MOCK_PACKAGE = SimpleNamespace(
+    id="package-1",
+    name="Stroke & Neuro Recovery",
+    tag="Most requested",
+    icon="Brain",
+    price=24000.0,
+    cadence="per month · 12 sessions",
+    sessionCount=12,
+    validityDays=30,
+    blurb="Structured neuro-rehab at home.",
+    points=["Same therapist for the whole plan"],
+    featured=True,
+    sortOrder=1,
+    isActive=True,
+    createdAt=NOW,
+    updatedAt=NOW,
+)
+
+MOCK_PACKAGE_PURCHASE = SimpleNamespace(
+    id="purchase-1",
+    userId="patient-1",
+    packageId="package-1",
+    paymentId="payment-1",
+    sessionsTotal=12,
+    sessionsUsed=2,
+    status="ACTIVE",
+    purchasedAt=FUTURE_AWARE,
+    expiresAt=FUTURE_AWARE,
+    createdAt=NOW,
+    updatedAt=NOW,
+)
+
 MOCK_REPORT = SimpleNamespace(
     id="report-1",
     patientId="patient-1",
@@ -214,7 +253,7 @@ MOCK_REVIEW = SimpleNamespace(
     session=MOCK_COMPLETED_SESSION,
 )
 
-TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification"]
+TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification", "package", "packagepurchase"]
 METHODS = [
     "find_unique",
     "find_many",

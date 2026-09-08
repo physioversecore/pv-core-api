@@ -13,6 +13,8 @@ SEED_DATA = [
         "icon": "Brain",
         "price": 24000,
         "cadence": "per month \u00b7 12 sessions",
+        "sessionCount": 12,
+        "validityDays": 30,
         "blurb": "Structured neuro-rehab for stroke, Parkinson's and spinal cord recovery at home.",
         "points": [
             "Gait, balance and speech-support coordination",
@@ -28,6 +30,8 @@ SEED_DATA = [
         "icon": "Activity",
         "price": 16000,
         "cadence": "per month \u00b7 8 sessions",
+        "sessionCount": 8,
+        "validityDays": 30,
         "blurb": "ACL, rotator cuff, ankle and hamstring rehab with a graded return-to-sport plan.",
         "points": [
             "Strength and mobility testing at week 1 and 4",
@@ -43,6 +47,8 @@ SEED_DATA = [
         "icon": "HeartHandshake",
         "price": 19000,
         "cadence": "per month \u00b7 10 sessions",
+        "sessionCount": 10,
+        "validityDays": 30,
         "blurb": "Keep aging parents walking safely \u2014 strength, balance and home-safety guidance.",
         "points": [
             "Home hazard check on the first visit",

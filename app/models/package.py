@@ -11,6 +11,8 @@ class PackageCreate(BaseModel):
     cadence: str
     blurb: str
     points: list[str]
+    sessionCount: int = 10
+    validityDays: int = 30
     featured: bool = False
     sortOrder: int = 0
     isActive: bool = True
@@ -24,6 +26,8 @@ class PackageUpdate(BaseModel):
     cadence: str | None = None
     blurb: str | None = None
     points: list[str] | None = None
+    sessionCount: int | None = None
+    validityDays: int | None = None
     featured: bool | None = None
     sortOrder: int | None = None
     isActive: bool | None = None
@@ -38,6 +42,8 @@ class PackageResponse(BaseModel):
     cadence: str
     blurb: str
     points: list[str]
+    sessionCount: int
+    validityDays: int
     featured: bool
     sortOrder: int
     isActive: bool

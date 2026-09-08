@@ -50,6 +50,7 @@ class BookingPaymentRequest(BaseModel):
     fee: float = Field(ge=0, le=1000000)
     notes: str | None = Field(default=None, max_length=2000)
     familyMemberId: str | None = Field(default=None, max_length=64)
+    packagePurchaseId: str | None = Field(default=None, max_length=64)
     currency: str = Field(default="NPR", max_length=8)
     paymentMethod: str = Field(default="CASH", max_length=32)
     paymentType: str | None = Field(default=None, max_length=32)
@@ -76,6 +77,9 @@ class SessionPaymentResponse(BaseModel):
     address: str
     fee: float
     notes: str | None = None
+    bookedViaPackage: bool = False
+    packageName: str | None = None
+    packagePurchaseId: str | None = None
     createdAt: datetime
     updatedAt: datetime
 
@@ -85,4 +89,4 @@ class SessionPaymentResponse(BaseModel):
 
 class BookingPaymentResponse(BaseModel):
     session: SessionPaymentResponse
-    payment: PaymentResponse
+    payment: PaymentResponse | None = None
