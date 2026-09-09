@@ -20,6 +20,7 @@ from app.models.onboarding import (
     OnboardingStatusResponse,
 )
 from app.models.therapist import (
+    ClinicBrief,
     TherapistCreate,
     TherapistDashboardResponse,
     TherapistListResponse,
@@ -54,6 +55,30 @@ from app.models.payment import (
     PaymentListResponse,
     PaymentResponse,
     SessionPaymentResponse,
+)
+from app.models.coverage import (
+    CoverageClinic,
+    CoverageResponse,
+    CoverageTherapist,
+    ServiceAreaBrief,
+    ServiceAreaBriefListResponse,
+)
+from app.models.points import (
+    ApplyPointsRequest,
+    ApplyPointsResponse,
+    PointBalanceResponse,
+    PointGrantRequest,
+    PointGrantResponse,
+    PointTransactionListResponse,
+    PointTransactionResponse,
+    PointsConfig,
+    ReferralEntry,
+    ReferralSummaryResponse,
+)
+from app.models.notification import (
+    NotificationCreate,
+    NotificationListResponse,
+    NotificationResponse,
 )
 from app.models.report import (
     ReportCreate,

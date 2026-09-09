@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app import get_admin_user, get_current_user, get_db
 from app.routers import (
     admin_router,
+    notifications_router,
     auth_router,
     cart_router,
     patients_router,
@@ -48,6 +49,7 @@ _test_app.include_router(admin_router, prefix="/api/v1")
 _test_app.include_router(reports_router, prefix="/api/v1")
 _test_app.include_router(reviews_router, prefix="/api/v1")
 _test_app.include_router(uploads_router, prefix="/api/v1")
+_test_app.include_router(notifications_router, prefix="/api/v1")
 
 
 @_test_app.get("/health")
@@ -214,7 +216,19 @@ MOCK_REVIEW = SimpleNamespace(
     session=MOCK_COMPLETED_SESSION,
 )
 
-TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification"]
+MOCK_NOTIFICATION = SimpleNamespace(
+    id="notification-1",
+    userId="patient-1",
+    type="SESSION_BOOKED",
+    title="Booking confirmed",
+    body="Your session is confirmed.",
+    readAt=None,
+    refType="SESSION",
+    refId="session-1",
+    createdAt=datetime(2026, 9, 1, 9, 0),
+)
+
+TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification", "notification", "pointtransaction", "clinic", "therapistservicearea", "setting"]
 METHODS = [
     "find_unique",
     "find_many",

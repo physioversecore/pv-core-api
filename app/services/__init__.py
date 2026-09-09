@@ -52,6 +52,29 @@ from app.services.payment import (
     get_payments_for_user,
     update_payment,
 )
+from app.services.coverage import (
+    clinics_in_area,
+    haversine_km,
+    list_service_areas,
+    therapists_covering,
+)
+from app.services.points import (
+    award_referral_for_session,
+    get_balance,
+    get_config,
+    grant,
+    list_transactions,
+    mature_pending,
+    redeem,
+    reverse_for_session,
+    save_config,
+)
+from app.services.user_notification import (
+    create_notification,
+    list_notifications,
+    mark_all_read,
+    mark_read,
+)
 from app.services.report import (
     create_report,
     delete_report,

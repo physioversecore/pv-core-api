@@ -59,6 +59,15 @@ class AdminTherapistData(BaseModel):
     mediaUrls: str | None = None
     documents: list[AdminTherapistDocument] | None = None
 
+    # Listing and coverage. clinicName is denormalised so the table can show
+    # the workplace without a second request per row.
+    listingType: str = "BOOKABLE"
+    clinicId: str | None = None
+    clinicName: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
     class Config:
         from_attributes = True
 
@@ -80,6 +89,14 @@ class AdminTherapistUpdate(BaseModel):
     price: float | None = None
     experience: int | None = None
     bio: str | None = None
+
+    # Whether the therapist can be booked, where they work from, and how far
+    # they travel. Admin-only by virtue of the route.
+    listingType: str | None = None
+    clinicId: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
 
 
 class AdminRejectRequest(BaseModel):

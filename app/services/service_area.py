@@ -63,6 +63,8 @@ async def get_service_areas(
             "assignedTherapists": assigned_count,
             "bookingsThisMonth": bookings_count,
             "status": area.status,
+            "latitude": area.latitude,
+            "longitude": area.longitude,
         })
 
     return items, total
@@ -98,6 +100,8 @@ async def get_service_area(db: Prisma, area_id: str):
         "assignedTherapists": assigned_count,
         "bookingsThisMonth": bookings_count,
         "status": area.status,
+        "latitude": area.latitude,
+        "longitude": area.longitude,
     }
 
 
@@ -110,6 +114,8 @@ async def create_service_area(db: Prisma, data: dict):
             "name": data["name"],
             "localities": Json(localities),
             "status": _derive_status(len(therapist_ids)),
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
         }
     )
 
@@ -134,6 +140,9 @@ async def update_service_area(db: Prisma, area_id: str, data: dict):
         update_data["name"] = data["name"]
     if "localities" in data and data["localities"] is not None:
         update_data["localities"] = Json(data["localities"])
+    for coord in ("latitude", "longitude"):
+        if data.get(coord) is not None:
+            update_data[coord] = data[coord]
 
     if update_data:
         await db.servicearea.update(where={"id": area_id}, data=update_data)

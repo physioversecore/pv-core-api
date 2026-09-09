@@ -244,9 +244,14 @@ async def update_therapist_admin(
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    result = await update_admin_therapist(
-        db, therapist_id, data.model_dump(exclude_none=True)
-    )
+    try:
+        result = await update_admin_therapist(
+            db, therapist_id, data.model_dump(exclude_none=True)
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     await log_admin_activity(

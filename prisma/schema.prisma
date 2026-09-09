@@ -37,6 +37,28 @@ enum SessionStatus {
   DECLINE_REQUESTED
 }
 
+/// Whether a therapist can be booked through the app, or is listed for
+/// information only and visited at their workplace.
+enum ListingType {
+  BOOKABLE
+  INFO_ONLY
+}
+
+enum PointTxType {
+  REFERRAL_EARN
+  PROMO_GRANT
+  REDEMPTION
+  ADJUSTMENT
+  EXPIRY
+}
+
+enum PointTxStatus {
+  PENDING
+  AVAILABLE
+  REVERSED
+  EXPIRED
+}
+
 enum SessionType {
   HOME_VISIT
   CLINIC
@@ -69,6 +91,16 @@ model User {
   mustChangePassword Boolean @default(false)
   tokenVersion  Int       @default(0)
   referralCode  String?
+
+  /// Raw code as typed at signup, kept even if the code is later reissued.
+  referredByCode String?
+  /// Resolved referrer. Set once at signup and never changed — retro
+  /// attribution is a farming vector.
+  referredById  String?
+  referredBy    User?    @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referred      User[]   @relation("Referrals")
+
+  pointTransactions PointTransaction[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -81,11 +113,13 @@ model User {
   payments    Payment[]
   refunds     Refund[]     @relation("PatientRefunds")
   activityLogs ActivityLog[]
+  notifications Notification[]
 
   @@index([role])
   @@index([status])
   @@index([city])
   @@index([referralCode])
+  @@index([referredById])
   @@index([role, status])
 }
 
@@ -150,6 +184,20 @@ model Therapist {
   bio        String
   mediaUrls  String?
   applicationStatus ApplicationStatus @default(INCOMPLETE)
+
+  /// BOOKABLE therapists expose slots; INFO_ONLY ones are directory entries
+  /// visited at their clinic.
+  listingType ListingType @default(BOOKABLE)
+
+  /// Workplace. Hours, services, address and phone all resolve through the
+  /// clinic rather than being duplicated onto the therapist.
+  clinicId   String?
+  clinic     Clinic?  @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+
+  /// Home-visit coverage. Null until geocoded.
+  latitude        Float?
+  longitude       Float?
+  serviceRadiusKm Int?
 
   sessionsOverride       Int?
   reviewsOverride        Int?
@@ -224,6 +272,9 @@ model Session {
   patientId       String
   patient         User          @relation("PatientSessions", fields: [patientId], references: [id], onDelete: Cascade)
   familyMemberId  String?
+  /// Where a CLINIC-type visit happens. Null for a home visit.
+  clinicId        String?
+  clinic          Clinic?       @relation(fields: [clinicId], references: [id], onDelete: SetNull)
   familyMember    FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
   date            DateTime
   time            String
@@ -320,6 +371,63 @@ model CartItem {
   updatedAt  DateTime     @updatedAt
 
   @@index([userId])
+}
+
+/// Append-only points ledger. Balance is derived, never stored as a mutable
+/// integer: the activity feed renders these rows directly, and earned / used
+/// totals are sums over them. A mutable counter would give no audit trail and
+/// would race on concurrent redemption.
+model PointTransaction {
+  id       String        @id @default(cuid())
+  userId   String
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Positive to earn, negative to spend. Never zero.
+  delta    Int
+  type     PointTxType
+  status   PointTxStatus @default(PENDING)
+
+  /// Audit text, e.g. the admin's reason for a grant.
+  reason   String?
+
+  /// What produced this row, so the ledger can be traced back.
+  refType  String?
+  refId    String?
+
+  /// Guards against double-crediting when a request is retried — the most
+  /// common failure mode in a points system.
+  idempotencyKey String? @unique
+
+  /// Per-batch expiry. Null means the batch never expires.
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Machine key the client switches on, e.g. SESSION_BOOKED, REFERRAL_REWARDED.
+  type      String
+  title     String
+  body      String
+
+  /// Null until read. Nullable rather than a bool so "when" is recoverable.
+  readAt    DateTime?
+
+  /// What the notification points at, so the client can deep-link.
+  refType   String?
+  refId     String?
+
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 model Setting {
@@ -462,6 +570,12 @@ model ServiceArea {
   name      String
   localities Json
   status    String   @default("Active")
+
+  /// Centre point, so the coverage map can measure distance instead of
+  /// matching a free-text city string. Null until the area is geocoded.
+  latitude  Float?
+  longitude Float?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -581,8 +695,15 @@ model Clinic {
   services  String[]
   phone     String
   hours     String
+
+  latitude  Float?
+  longitude Float?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  therapists Therapist[]
+  sessions   Session[]
 
   @@index([city])
 }

@@ -75,7 +75,9 @@ async def get_admin_therapists(
 
     users = await db.user.find_many(
         where=where,
-        include={"therapist": {"include": {"verifications": True}}},
+        include={
+            "therapist": {"include": {"verifications": True, "clinic": True}}
+        },
         skip=None if needs_post_sort else skip,
         take=None if needs_post_sort else limit,
         order=order,
@@ -108,6 +110,12 @@ async def get_admin_therapists(
             "documents": [
                 _document_payload(v) for v in (t.verifications if t else [])
             ],
+            "listingType": (getattr(t, "listingType", None) or "BOOKABLE") if t else "BOOKABLE",
+            "clinicId": getattr(t, "clinicId", None) if t else None,
+            "clinicName": (t.clinic.name if t and getattr(t, "clinic", None) else None),
+            "latitude": getattr(t, "latitude", None) if t else None,
+            "longitude": getattr(t, "longitude", None) if t else None,
+            "serviceRadiusKm": getattr(t, "serviceRadiusKm", None) if t else None,
         })
 
     if needs_post_sort:
@@ -151,6 +159,10 @@ async def get_admin_therapist(db: Prisma, key: str):
         verifications = []
         sessions = 0
 
+    clinic = None
+    if t and getattr(t, "clinicId", None):
+        clinic = await db.clinic.find_unique(where={"id": t.clinicId})
+
     return {
         "id": t.id if t else u.id,
         "name": u.name,
@@ -169,6 +181,12 @@ async def get_admin_therapist(db: Prisma, key: str):
         "bio": t.bio if t else None,
         "mediaUrls": t.mediaUrls if t else None,
         "documents": [_document_payload(v) for v in verifications],
+        "listingType": (getattr(t, "listingType", None) or "BOOKABLE") if t else "BOOKABLE",
+        "clinicId": getattr(t, "clinicId", None) if t else None,
+        "clinicName": clinic.name if clinic else None,
+        "latitude": getattr(t, "latitude", None) if t else None,
+        "longitude": getattr(t, "longitude", None) if t else None,
+        "serviceRadiusKm": getattr(t, "serviceRadiusKm", None) if t else None,
     }
 
 
@@ -188,6 +206,21 @@ async def update_admin_therapist(db: Prisma, key: str, data: dict):
         therapist_fields["price"] = float(data["price"])
     if "experience" in data and data["experience"] is not None:
         therapist_fields["experience"] = int(data["experience"])
+    # Coverage and listing. Passed straight through: this route is already
+    # admin-gated, so there is no per-field authorisation to repeat here.
+    for field in (
+        "clinicId",
+        "latitude",
+        "longitude",
+        "serviceRadiusKm",
+    ):
+        if field in data and data[field] is not None:
+            therapist_fields[field] = data[field]
+
+    if data.get("listingType") is not None:
+        if data["listingType"] not in ("BOOKABLE", "INFO_ONLY"):
+            raise ValueError("listingType must be BOOKABLE or INFO_ONLY")
+        therapist_fields["listingType"] = data["listingType"]
 
     if "phone" in data:
         user_fields["phone"] = data["phone"]

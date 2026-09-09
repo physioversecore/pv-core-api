@@ -69,6 +69,18 @@ async def is_slot_booked(
 
 
 async def create_session(db: Prisma, data: dict):
+    # An INFO_ONLY therapist is a directory entry visited at their workplace,
+    # with no slots to book. Enforced here rather than only in the UI, so a
+    # deep link or a stale client cannot create the session anyway.
+    therapist = await db.therapist.find_unique(
+        where={"id": data["therapistId"]}
+    )
+    if therapist and therapist.listingType == "INFO_ONLY":
+        raise ValueError(
+            "This therapist is listed for information only and cannot be "
+            "booked through the app."
+        )
+
     family_member = await validate_family_member(
         db, data.get("patientId"), data.get("familyMemberId")
     )
@@ -88,6 +100,8 @@ async def create_session(db: Prisma, data: dict):
     }
     if family_member:
         create_data["familyMemberId"] = family_member.id
+    if data.get("clinicId"):
+        create_data["clinicId"] = data["clinicId"]
     session = await db.session.create(
         data=create_data, include={"therapist": True, "familyMember": True}
     )
