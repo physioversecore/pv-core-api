@@ -21,6 +21,18 @@ class TherapistUpdate(BaseModel):
     experience: int | None = None
     bio: str | None = None
 
+    # Where the therapist works from and how far they travel. Theirs to set:
+    # it describes their own availability, not their standing on the platform.
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
+    # Admin-only, enforced in the router. Whether a therapist is bookable and
+    # which clinic they are listed under is the platform's call, not a claim
+    # a therapist may make about themselves.
+    listingType: str | None = None
+    clinicId: str | None = None
+
 
 class TherapistDocument(BaseModel):
     id: str
@@ -49,6 +61,11 @@ class TherapistProfileResponse(BaseModel):
     photo: str | None = None
     documents: list[TherapistDocument] | None = None
 
+    listingType: str = "BOOKABLE"
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
     class Config:
         from_attributes = True
 
@@ -65,6 +82,34 @@ class TherapistProfileUpdate(BaseModel):
     bio: str | None = None
     mediaUrls: str | None = None
 
+    # A therapist describes their own reach. Listing type and clinic are not
+    # here on purpose -- those stay with admins.
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
+
+class ClinicBrief(BaseModel):
+    """Workplace details for an information-only therapist.
+
+    Resolved through the linked clinic rather than duplicated onto the
+    therapist, so hours, services and address have one source of truth.
+    """
+
+    id: str
+    name: str
+    area: str = ""
+    city: str = ""
+    address: str = ""
+    phone: str = ""
+    hours: str = ""
+    services: list[str] = []
+    latitude: float | None = None
+    longitude: float | None = None
+
+    class Config:
+        from_attributes = True
+
 
 class TherapistResponse(BaseModel):
     id: str
@@ -78,6 +123,17 @@ class TherapistResponse(BaseModel):
     price: float
     experience: int
     bio: str
+
+    # BOOKABLE therapists expose slots and can be booked. INFO_ONLY ones are
+    # directory entries visited at their workplace.
+    listingType: str = "BOOKABLE"
+    clinic: ClinicBrief | None = None
+
+    # Home-visit coverage, for the map. Null until geocoded.
+    latitude: float | None = None
+    longitude: float | None = None
+    serviceRadiusKm: int | None = None
+
     createdAt: datetime
     updatedAt: datetime
 

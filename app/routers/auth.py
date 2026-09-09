@@ -216,6 +216,20 @@ async def signup(
             user_data["password"] = generate_temp_password()
             user_data["mustChangePassword"] = True
 
+    # Referral attribution: captured only here, at signup, and never changed
+    # afterwards -- retro-attribution would let anyone claim a referral after
+    # the fact.
+    submitted_code = (payload.get("referralCode") or "").strip()
+    if submitted_code:
+        referrer = await db.user.find_first(
+            where={"referralCode": submitted_code}
+        )
+        # A referrer must exist, must be a different account, and must share
+        # the role: the currencies and milestones differ per side.
+        if referrer and referrer.email != data.email and referrer.role == user_data["role"]:
+            user_data["referredByCode"] = submitted_code
+            user_data["referredById"] = referrer.id
+
     user = await create_user(db, user_data)
 
     if role_val == "THERAPIST":
