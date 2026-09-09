@@ -43,6 +43,33 @@ class Settings(BaseSettings):
 
     upload_dir: str = "./Upload"
 
+    # Public base URL of the Next.js frontend — used to build payment gateway
+    # return/callback URLs (Khalti return_url, etc.). Must be publicly reachable
+    # when gateways need to redirect the user back.
+    app_public_url: str = "http://localhost:3000"
+
+    # --- Payment Gateway: eSewa (ePay v2) ---
+    esewa_env: str = "uat"
+    esewa_product_code: str = "EPAYTEST"
+    esewa_secret_key: str = ""
+    esewa_success_url: str = "http://localhost:3000/api/webhooks/payments/esewa"
+    esewa_failure_url: str = "http://localhost:3000/api/webhooks/payments/esewa"
+
+    # --- Payment Gateway: Khalti / IME (KPG-2 Web Checkout) ---
+    khalti_env: str = "test"
+    khalti_secret_key: str = ""
+    khalti_public_key: str = ""
+    khalti_return_url: str = "http://localhost:3000/api/webhooks/payments/khalti"
+
+    # --- Payment Gateway: ConnectIPS (NCHL) — Phase 2 ---
+    connectips_env: str = "uat"
+    connectips_merchant_id: str = ""
+    connectips_app_id: str = ""
+    connectips_app_name: str = ""
+    connectips_app_password: str = ""
+    connectips_pfx_path: str = ""
+    connectips_pfx_password: str = ""
+
     class Config:
         env_file = ".env"
 
