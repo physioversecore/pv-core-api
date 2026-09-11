@@ -158,9 +158,13 @@ async def update_session_by_id(
     if new_status:
         from app.services.notification import log_admin_notification
         from app.services.session import _enrich_session
-        enriched = _enrich_session(session) if not hasattr(session, "patient") else session
-        patient_name = enriched.get("patient", {}).get("name", "Unknown") if isinstance(enriched.get("patient"), dict) else getattr(getattr(session, "patient", None), "name", "Unknown")
-        therapist_name = enriched.get("therapist", {}).get("name", "Unknown") if isinstance(enriched.get("therapist"), dict) else getattr(getattr(session, "therapist", None), "name", "Unknown")
+        # A real Prisma row always *has* `patient` (None unless included), so
+        # the old `hasattr` branch handed a model object to `.get()` and every
+        # status change 500'd. `_enrich_session` flattens either shape, and the
+        # names it produces are the same ones the branch was reaching for.
+        enriched = _enrich_session(session)
+        patient_name = enriched.get("patientName") or "Unknown"
+        therapist_name = enriched.get("therapistName") or "Unknown"
         if new_status == "CANCELLED":
             await log_admin_notification(
                 db,
