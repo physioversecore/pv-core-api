@@ -122,4 +122,6 @@ async def reject_rate_change(db: Prisma, request_id: str, admin_notes: str = "")
         where={"id": request_id},
         data={"status": "REJECTED", "adminNotes": admin_notes},
     )
-    return {"success": True}
+    # therapistId is returned so the caller can address the therapist -- the
+    # request id alone does not say whose rate this was.
+    return {"success": True, "therapistId": request.therapistId}

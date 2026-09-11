@@ -804,8 +804,13 @@ async def approve_block_request(db: Prisma, request_id: str, admin_notes: str = 
     }
     result = await block_range(db, request.therapistId, block_data)
 
+    # therapistId and the span come back so the caller can tell the therapist
+    # what was decided without re-reading the request.
     return {
         "success": True,
+        "therapistId": request.therapistId,
+        "dateFrom": request.dateFrom,
+        "dateTo": request.dateTo,
         "blocked": result["blocked"],
         "cancelledCount": result["cancelledCount"],
         "affectedPatients": result["affectedPatients"],
@@ -822,4 +827,9 @@ async def reject_block_request(db: Prisma, request_id: str, admin_notes: str = "
         data={"status": "REJECTED", "adminNotes": admin_notes},
     )
 
-    return {"success": True}
+    return {
+        "success": True,
+        "therapistId": request.therapistId,
+        "dateFrom": request.dateFrom,
+        "dateTo": request.dateTo,
+    }

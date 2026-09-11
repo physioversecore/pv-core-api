@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -38,6 +38,7 @@ from app import (
     delete_audit_entry,
     delete_recurring_pattern,
     generate_availability,
+    notify_block_request_decided,
     get_audit_entries,
     get_current_user,
     get_db,
@@ -316,22 +317,49 @@ async def list_block_requests(
 @router.put("/block-requests/{request_id}/approve")
 async def approve_request(
     request_id: str,
+    background_tasks: BackgroundTasks,
     data: dict = {},
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     if current_user.role != Role.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return await approve_block_request(db, request_id, data.get("adminNotes", ""))
+    result = await approve_block_request(db, request_id, data.get("adminNotes", ""))
+    # The service does not refuse a second approval, so the producer's
+    # once-per-request key is what stops a duplicate landing in the feed.
+    if result.get("success"):
+        background_tasks.add_task(
+            notify_block_request_decided,
+            db,
+            request_id,
+            therapist_id=result.get("therapistId"),
+            approved=True,
+            date_from=result.get("dateFrom", ""),
+            date_to=result.get("dateTo", ""),
+        )
+    return result
 
 
 @router.put("/block-requests/{request_id}/reject")
 async def reject_request(
     request_id: str,
+    background_tasks: BackgroundTasks,
     data: dict = {},
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     if current_user.role != Role.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return await reject_block_request(db, request_id, data.get("adminNotes", ""))
+    result = await reject_block_request(db, request_id, data.get("adminNotes", ""))
+    if result.get("success"):
+        background_tasks.add_task(
+            notify_block_request_decided,
+            db,
+            request_id,
+            therapist_id=result.get("therapistId"),
+            approved=False,
+            date_from=result.get("dateFrom", ""),
+            date_to=result.get("dateTo", ""),
+            admin_notes=data.get("adminNotes", ""),
+        )
+    return result

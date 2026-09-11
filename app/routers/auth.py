@@ -23,6 +23,7 @@ from app import (
     create_user,
     find_or_create_google_user,
     generate_referral_code,
+    notify_referral_joined,
     generate_temp_password,
     get_current_user,
     get_current_user_lenient,
@@ -231,6 +232,17 @@ async def signup(
             user_data["referredById"] = referrer.id
 
     user = await create_user(db, user_data)
+
+    # The referrer has no other way to learn their code was used: the payout
+    # only comes much later, when the new patient completes a first session.
+    if user_data.get("referredById"):
+        background_tasks.add_task(
+            notify_referral_joined,
+            db,
+            referrer_user_id=user_data["referredById"],
+            joiner_name=user.name,
+            joiner_user_id=user.id,
+        )
 
     if role_val == "THERAPIST":
         await create_therapist_signup(db, user, payload)

@@ -4,7 +4,11 @@ from prisma.enums import Role
 
 from app import (
     reverse_for_session,
-    create_notification,
+    notify_referral_rewarded,
+    notify_session_booked,
+    notify_session_cancelled,
+    notify_session_rescheduled,
+    notify_session_status_change,
     award_referral_for_session,
     PaginationParams,
     RescheduleRequest,
@@ -35,6 +39,7 @@ router = APIRouter(prefix="/sessions", tags=["Sessions"])
 )
 async def book_session(
     data: SessionCreate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
@@ -62,6 +67,10 @@ async def book_session(
                 detail="That time slot was just booked — please choose another.",
             )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Off the response path: the patient gets their booking back even if the
+    # feed write fails.
+    background_tasks.add_task(notify_session_booked, db, session["id"])
     return SessionResponse.model_validate(session)
 
 
@@ -69,6 +78,7 @@ async def book_session(
 async def reschedule_session_by_id(
     session_id: str,
     data: RescheduleRequest,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Prisma =Depends(get_db),
 ):
@@ -87,6 +97,7 @@ async def reschedule_session_by_id(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=error
         )
+    background_tasks.add_task(notify_session_rescheduled, db, session_id)
     return SessionResponse.model_validate(updated)
 
 
@@ -191,11 +202,28 @@ async def update_session_by_id(
     # above is request-only and is None when the caller changed something else,
     # which would silently skip the award.
     effective_status = getattr(updated, "status", None) or new_status
+
+    # The per-user feed hangs off the *transition*, not the write: this
+    # endpoint also edits notes and times, and a client that re-saves the same
+    # status must not announce it twice.
+    background_tasks.add_task(
+        notify_session_status_change,
+        db,
+        session_id,
+        new_status=effective_status,
+        previous_status=previous_status,
+        actor_user_id=current_user.id,
+    )
+
     if effective_status == "COMPLETED" and previous_status != "COMPLETED":
         awarded = await award_referral_for_session(db, session)
         for user_id, row in awarded:
             background_tasks.add_task(
-                _notify_referral_award, db, user_id, row.delta
+                notify_referral_rewarded,
+                db,
+                user_id,
+                row.delta,
+                transaction_id=getattr(row, "id", None),
             )
     elif effective_status == "CANCELLED" and previous_status == "COMPLETED":
         # A completed session that is later cancelled or refunded takes its
@@ -203,18 +231,6 @@ async def update_session_by_id(
         await reverse_for_session(db, session_id, "Session cancelled after completion")
 
     return SessionResponse.model_validate(updated)
-
-
-async def _notify_referral_award(db: Prisma, user_id: str, points: int):
-    await create_notification(
-        db,
-        user_id,
-        type="REFERRAL_REWARDED",
-        title="You earned {} points".format(points),
-        body="Your referral completed their first session. Points become "
-        "available after a short hold.",
-        ref_type="REFERRAL",
-    )
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -229,4 +245,9 @@ async def cancel_session(
         and current_user.role != Role.ADMIN
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    # Awaited rather than backgrounded, unlike every other producer here: this
+    # endpoint hard-deletes the row, and a background task would run after it
+    # is gone with no names or times left to write. `safe_notify` swallows, so
+    # an inline call still cannot fail the delete.
+    await notify_session_cancelled(db, session_id, actor_user_id=current_user.id)
     await delete_session(db, session_id)
