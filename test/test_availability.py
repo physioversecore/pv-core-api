@@ -15,6 +15,7 @@ out one request per therapist.
 
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 from .conftest import MOCK_THERAPIST_PROFILE
 
@@ -799,3 +800,98 @@ class TestBulkSlotsValidation:
         )
 
         assert response.status_code == 400
+
+
+class TestSlotsDoNotLeakPatientDetails:
+    """`GET /therapists/{id}/slots` admits any authenticated user.
+
+    A booked slot carries the patient's name and phone, so before this a
+    patient could read another patient's contact details out of any
+    therapist's calendar just by asking for that calendar. The owning
+    therapist and an admin still need those fields to run their day.
+    """
+
+    def _booked(self, db):
+        db.therapist.find_unique = AsyncMock(
+            return_value=MagicMock(id="t1", userId="tu1")
+        )
+        return {
+            "slots": [
+                {
+                    "date": "2026-03-10",
+                    "time": "09:00",
+                    "status": "booked",
+                    "patientName": "Sita Rai",
+                    "patientPhone": "9801234567",
+                    "sessionType": "HOME_VISIT",
+                    "fee": 1500.0,
+                    "sessionId": "s1",
+                }
+            ],
+            "blocks": [],
+        }
+
+    def test_a_patient_sees_the_slot_is_taken_but_not_who_took_it(
+        self, patient_client, mock_db, monkeypatch
+    ):
+        import app.routers.therapists as r
+
+        monkeypatch.setattr(
+            r, "get_slots_for_range", AsyncMock(return_value=self._booked(mock_db))
+        )
+        res = patient_client.get(
+            "/api/v1/therapists/t1/slots?from_date=2026-03-10&to_date=2026-03-10"
+        )
+        assert res.status_code == 200
+        slot = res.json()["slots"][0]
+        assert slot["status"] == "booked", "the slot must still read as taken"
+        assert slot["patientName"] is None
+        assert slot["patientPhone"] is None
+        assert slot["fee"] is None
+        assert slot["sessionId"] is None
+
+    def test_another_therapist_is_no_better_placed_than_a_patient(
+        self, therapist_client, mock_db, monkeypatch
+    ):
+        import app.routers.therapists as r
+
+        monkeypatch.setattr(
+            r, "get_slots_for_range", AsyncMock(return_value=self._booked(mock_db))
+        )
+        # Signed-in therapist owns a *different* therapist row.
+        monkeypatch.setattr(
+            r, "get_therapist_by_user", AsyncMock(return_value=MagicMock(id="other"))
+        )
+        res = therapist_client.get(
+            "/api/v1/therapists/t1/slots?from_date=2026-03-10&to_date=2026-03-10"
+        )
+        assert res.json()["slots"][0]["patientPhone"] is None
+
+    def test_the_owning_therapist_still_gets_their_day(
+        self, therapist_client, mock_db, monkeypatch
+    ):
+        import app.routers.therapists as r
+
+        monkeypatch.setattr(
+            r, "get_slots_for_range", AsyncMock(return_value=self._booked(mock_db))
+        )
+        monkeypatch.setattr(
+            r, "get_therapist_by_user", AsyncMock(return_value=MagicMock(id="t1"))
+        )
+        res = therapist_client.get(
+            "/api/v1/therapists/t1/slots?from_date=2026-03-10&to_date=2026-03-10"
+        )
+        slot = res.json()["slots"][0]
+        assert slot["patientName"] == "Sita Rai"
+        assert slot["patientPhone"] == "9801234567"
+
+    def test_an_admin_can_see_them_too(self, admin_client, mock_db, monkeypatch):
+        import app.routers.therapists as r
+
+        monkeypatch.setattr(
+            r, "get_slots_for_range", AsyncMock(return_value=self._booked(mock_db))
+        )
+        res = admin_client.get(
+            "/api/v1/therapists/t1/slots?from_date=2026-03-10&to_date=2026-03-10"
+        )
+        assert res.json()["slots"][0]["patientName"] == "Sita Rai"
