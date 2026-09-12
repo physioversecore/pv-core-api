@@ -142,6 +142,10 @@ from app.services.admin import (
     update_admin_therapist,
 )
 from app.services.availability import (
+    BULK_SLOT_STATUSES,
+    BulkSlotRangeError,
+    MAX_BULK_THERAPISTS,
+    MAX_BULK_WINDOW_DAYS,
     apply_recurring_pattern,
     apply_schedule,
     approve_block_request,
@@ -154,6 +158,7 @@ from app.services.availability import (
     delete_recurring_pattern,
     generate_availability,
     get_audit_entries,
+    get_bulk_slots_for_range,
     get_monthly_availability,
     get_pending_block_requests,
     get_recurring_patterns,

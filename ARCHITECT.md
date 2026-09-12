@@ -191,7 +191,7 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 | GET  | `/therapist/earnings/transactions` | Therapist |
 | GET  | `/therapist/earnings/payouts` | Therapist |
 
-### Availability (24+ endpoints)
+### Availability (25+ endpoints)
 | Method | Path | Access |
 |---|---|---|
 | GET/PUT | `/availability/working-hours` | Therapist |
@@ -208,6 +208,7 @@ All endpoints under `/api/v1/`. See Swagger UI at `/docs` or ReDoc at `/redoc`.
 | POST | `/availability/block-range` | Therapist |
 | POST | `/availability/unblock` | Therapist |
 | GET  | `/availability/slots` | Authenticated |
+| GET  | `/availability/slots/bulk` | Authenticated (many therapists in one call — see `docs/availability_bulk_slots.md`) |
 | GET  | `/availability/working-days` | Therapist |
 | GET/POST | `/availability/audit-log` | Therapist |
 | DEL  | `/availability/audit-log/{id}` | Therapist |

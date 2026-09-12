@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -11,7 +11,11 @@ from app import (
     BlockInfoResponse,
     BlockRangeRequest,
     BlockRangeResponse,
+    BulkSlotRangeResponse,
+    BulkSlotRangeError,
     BulkSlotUpdate,
+    BULK_SLOT_STATUSES,
+    get_bulk_slots_for_range,
     GenerateAvailabilityRequest,
     get_therapist,
     MonthlyGridResponse,
@@ -242,6 +246,55 @@ async def get_slots_range(
     else:
         target = await _resolve_therapist(current_user, db)
     return await get_slots_for_range(db, target.id, from_date, to_date)
+
+
+@router.get("/slots/bulk", response_model=BulkSlotRangeResponse)
+async def get_bulk_slots_range(
+    from_date: str,
+    to_date: str,
+    therapist_ids: list[str] = Query(default_factory=list),
+    status_filter: list[str] = Query(default_factory=list, alias="status"),
+    include_slots: bool = True,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Slots for many therapists in one call — discovery's "who is free at T?".
+
+    Authenticated like every other availability read. `therapist_ids` may be
+    repeated or comma-separated; ids that cannot be answered come back under
+    `unavailable` rather than failing the request.
+    """
+    ids: list[str] = []
+    for raw in therapist_ids:
+        ids.extend(part.strip() for part in raw.split(",") if part.strip())
+
+    wanted: list[str] = []
+    for raw in status_filter:
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if part == "all":
+                wanted = list(BULK_SLOT_STATUSES)
+                break
+            if part not in BULK_SLOT_STATUSES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"status must be one of {', '.join(BULK_SLOT_STATUSES)} or all",
+                )
+            wanted.append(part)
+
+    try:
+        return await get_bulk_slots_for_range(
+            db,
+            ids,
+            from_date,
+            to_date,
+            statuses=wanted or None,
+            include_slots=include_slots,
+        )
+    except BulkSlotRangeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("/working-days")
