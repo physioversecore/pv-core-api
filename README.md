@@ -12,6 +12,7 @@ Backend API for the Sahayatri Physiotherapy platform. Built with **Python 3.13**
 - Product shop (equipment, medicine, nutrition — buy or rent)
 - Shopping cart with rental day calculation and delivery fee logic
 - Payment tracking and booking+payment combo flow
+- **eSewa + Khalti payment gateways** (Khalti by IME — IME Pay removed as a separate method). Gateway methods return a `PENDING` payment + an `initiation` (eSewa signed form / Khalti redirect URL); the status only becomes `COMPLETED` after server-side verification via `POST /payments/{id}/confirm`. Non-gateway methods keep the legacy immediate `COMPLETED` path. Gateway selection is method-gated (`GATEWAY_METHODS = ("esewa", "khalti")`); legacy `imepay` values are aliased to the Khalti rail.
 - Patient progress reports with file uploads
 - Reviews and ratings
 - Complaints with up to 3 evidence attachments per filing (session-based upload + authenticated serving) and an admin "new complaints" badge endpoint (`GET /admin/complaints/new-count?since=`)
@@ -228,11 +229,15 @@ docker-compose.prod.yml  # Production: API + PostgreSQL + Redis
 ### Payments
 | Method | Endpoint | Description | Access |
 |---|---|---|---|
-| POST | `/api/v1/payments/process` | Booking + payment combo | Patient |
+| POST | `/api/v1/payments/process` | Booking + payment combo — returns `initiation` (form fields / redirect URL) for gateway methods (`esewa`, `khalti`); manual methods are `COMPLETED` immediately | Patient |
+| POST | `/api/v1/payments/{id}/confirm` | Server-side gateway verification → `COMPLETED` (idempotent; fired by the frontend webhook `src/app/api/webhooks/payments/[vendor]/route.ts`) | Owner/Admin |
+| GET | `/api/v1/payments/{id}/status` | Current stored payment status (client polling after redirect back from the gateway) | Owner/Admin |
 | POST | `/api/v1/payments` | Create payment | Authenticated |
 | GET | `/api/v1/payments` | List payments | User (own) / Admin (all) |
 | GET | `/api/v1/payments/{id}` | Get payment details | Authenticated |
 | PUT | `/api/v1/payments/{id}/status` | Update payment status | Admin |
+
+Gateway callbacks should **only** be driven by the backend-facing webhook (`app/services/payments/{esewa,khalti,manual}.py` under a common `PaymentGateway` interface in `gateway.py`); the browser never marks a payment complete.
 
 ### Reports
 | Method | Endpoint | Description | Access |
@@ -345,6 +350,16 @@ Includes: users CRUD, therapist management, patient management, dashboard stats,
 | `OTP_EXPIRE_MINUTES` | `5` | OTP code expiry in minutes |
 | `OTP_LENGTH` | `6` | OTP code digit count |
 | `OTP_MAX_ATTEMPTS` | `5` | Max verification attempts before code expires |
+| `APP_PUBLIC_URL` | `http://localhost:3000` | Public base URL of the Next.js frontend — used to build gateway return URLs |
+| `ESEWA_ENV` | `uat` | eSewa environment (`uat` sandbox / `prod`) |
+| `ESEWA_PRODUCT_CODE` | `EPAYTEST` | eSewa sandbox product code |
+| `ESEWA_SECRET_KEY` | (empty) | eSewa shared secret (signs the initiated form) |
+| `ESEWA_SUCCESS_URL` | `http://localhost:3000/api/webhooks/payments/esewa` | eSewa return URL (POST form back to our webhook) |
+| `ESEWA_FAILURE_URL` | `http://localhost:3000/api/webhooks/payments/esewa` | eSewa failure return URL (status comes from the signed `data` payload, not a `?status=` query) |
+| `KHALTI_SECRET_KEY` | (empty) | Khalti merchant secret (KPG-2 Web Checkout) — required for Khalti payments |
+| `KHALTI_PUBLIC_KEY` | (empty) | Khalti live test public key |
+| `KHALTI_ENV` | `test` | Khalti environment (`test` / `live`) |
+| `KHALTI_RETURN_URL` | `http://localhost:3000/api/webhooks/payments/khalti` | Khalti return URL (webhook route, updates via `purchase_order_id` = `pymt-{paymentId}`) |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Postgres password (prod only) |
 
 ---
