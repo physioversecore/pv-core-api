@@ -23,7 +23,12 @@ def _compute_totals(items):
     subtotal = 0.0
     for item in items:
         if item.type == "RENT":
-            subtotal += item.product.price * item.quantity * item.rentalDays
+            # Rentals bill the daily rate, not the purchase price: using
+            # `price` here charged a 7-day TENS unit rental at 7 x 4500
+            # instead of 7 x 80.
+            subtotal += (
+                item.product.rentPerDay * item.quantity * item.rentalDays
+            )
         else:
             subtotal += item.product.price * item.quantity
     delivery_fee = 0.0 if subtotal >= 2000 else 150.0
