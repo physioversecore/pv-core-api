@@ -68,6 +68,19 @@ async def is_slot_booked(
     return existing > 0
 
 
+async def expire_stale_pending_holds(db: Prisma, hold_minutes: int = 20):
+    """Cancel sessions created as PENDING_HOLD that were never upgraded to
+    SCHEDULED by a confirmed payment. They never lock the slot, but sweeping
+    them keeps the bookkeeping honest for the patient's own session list."""
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=hold_minutes)
+    await db.session.update_many(
+        where={"status": "PENDING_HOLD", "createdAt": {"lt": cutoff}},
+        data={"status": "CANCELLED"},
+    )
+
+
 async def create_session(db: Prisma, data: dict):
     # An INFO_ONLY therapist is a directory entry visited at their workplace,
     # with no slots to book. Enforced here rather than only in the UI, so a
@@ -98,6 +111,8 @@ async def create_session(db: Prisma, data: dict):
         "fee": data["fee"],
         "notes": data.get("notes"),
     }
+    if data.get("status"):
+        create_data["status"] = data["status"]
     if family_member:
         create_data["familyMemberId"] = family_member.id
     if data.get("clinicId"):
@@ -109,35 +124,38 @@ async def create_session(db: Prisma, data: dict):
 
 
 async def get_sessions_for_patient(db: Prisma, patient_id: str, skip=0, limit=100):
+    where = {"patientId": patient_id, "status": {"not": "PENDING_HOLD"}}
     sessions = await db.session.find_many(
-        where={"patientId": patient_id},
+        where=where,
         skip=skip,
         take=limit,
         order={"createdAt": "desc"},
         include={"therapist": True, "familyMember": True},
     )
-    total = await db.session.count(where={"patientId": patient_id})
+    total = await db.session.count(where=where)
     return _enrich_sessions(sessions), total
 
 
 async def get_sessions_for_therapist(db: Prisma, therapist_id: str, skip=0, limit=100):
+    where = {"therapistId": therapist_id, "status": {"not": "PENDING_HOLD"}}
     sessions = await db.session.find_many(
-        where={"therapistId": therapist_id},
+        where=where,
         skip=skip,
         take=limit,
         order={"date": "asc"},
         include={"therapist": True, "patient": True, "familyMember": True},
     )
-    total = await db.session.count(where={"therapistId": therapist_id})
+    total = await db.session.count(where=where)
     return _enrich_sessions(sessions), total
 
 
 async def get_all_sessions(db: Prisma, skip=0, limit=100):
     sessions = await db.session.find_many(
         skip=skip, take=limit, order={"createdAt": "desc"},
+        where={"status": {"not": "PENDING_HOLD"}},
         include={"therapist": True, "familyMember": True},
     )
-    total = await db.session.count()
+    total = await db.session.count(where={"status": {"not": "PENDING_HOLD"}})
     return _enrich_sessions(sessions), total
 
 

@@ -172,6 +172,7 @@ from app.services import (
     delete_admin_performance,
     delete_admin_therapist,
     delete_service_area,
+    expire_stale_pending_holds,
     find_or_create_google_user,
     get_admin_dashboard_stats,
     get_admin_earnings,

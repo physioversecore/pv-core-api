@@ -17,6 +17,7 @@ from app import (
     SessionPaymentResponse,
     create_payment,
     create_session,
+    expire_stale_pending_holds,
     get_admin_user,
     get_all_payments,
     get_current_user,
@@ -32,11 +33,13 @@ from app import (
     notify_session_booked,
     pagination_params,
     update_payment,
+    update_session,
 )
 from app.services.payments import COMPLETED as PAYMENT_COMPLETED
 from app.services.payments import CANCELLED as PAYMENT_CANCELLED
 from app.services.payments import FAILED as PAYMENT_FAILED
 from app.services.payments import PENDING as PAYMENT_PENDING
+from app.services.session import get_session, is_slot_booked
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -58,21 +61,32 @@ async def process_booking_payment(
     if current_user.role != Role.PATIENT:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
+    method = normalize_method(data.paymentMethod)
+    is_gateway = is_gateway_method(method)
+
+    # Opportunistic sweep of abandoned gateway holds.
+    await expire_stale_pending_holds(db)
+
+    session_data = {
+        "therapistId": data.therapistId,
+        "patientId": current_user.id,
+        "date": data.date,
+        "time": data.time,
+        "type": data.type.upper(),
+        "address": data.address,
+        "fee": data.fee,
+        "familyMemberId": data.familyMemberId,
+        "notes": data.notes,
+    }
+    # Gateway bookings start as a PENDING_HOLD — the slot is NOT considered
+    # booked until the payment is actually confirmed (see confirm_payment).
+    # Manual methods are immediately final, so the session is SCHEDULED at
+    # once (legacy behaviour).
+    if is_gateway:
+        session_data["status"] = "PENDING_HOLD"
+
     try:
-        session = await create_session(
-            db,
-            {
-                "therapistId": data.therapistId,
-                "patientId": current_user.id,
-                "date": data.date,
-                "time": data.time,
-                "type": data.type.upper(),
-                "address": data.address,
-                "fee": data.fee,
-                "familyMemberId": data.familyMemberId,
-                "notes": data.notes,
-            },
-        )
+        session = await create_session(db, session_data)
     except ValueError as e:
         if str(e) == "CONFLICT":
             raise HTTPException(
@@ -80,9 +94,6 @@ async def process_booking_payment(
                 detail="That time slot was just booked — please choose another.",
             )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    method = normalize_method(data.paymentMethod)
-    is_gateway = is_gateway_method(method)
 
     payment = await create_payment(
         db,
@@ -145,12 +156,15 @@ async def process_booking_payment(
             payment = await get_payment(db, payment.id)
         except GatewayConfigError as exc:
             # Gateway not configured — let the patient know clearly instead of
-            # silently marking the booking as paid.
+            # silently marking the booking as paid. The tentative hold session
+            # is cancelled, so the slot is never leaked as booked.
+            await update_session(db, session["id"], {"status": "CANCELLED"})
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(exc),
             )
         except GatewayError as exc:
+            await update_session(db, session["id"], {"status": "CANCELLED"})
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Payment gateway error: {exc}",
@@ -159,7 +173,10 @@ async def process_booking_payment(
     # The booking and the receipt are two different pieces of news: one says a
     # therapist is coming, the other that the money left. Both are backgrounded
     # so neither can cost the patient their confirmed booking.
-    background_tasks.add_task(notify_session_booked, db, session["id"])
+    if not is_gateway:
+        # A gateway booking is only "booked" once the payment is confirmed;
+        # the session notification fires from confirm_payment at that point.
+        background_tasks.add_task(notify_session_booked, db, session["id"])
     background_tasks.add_task(notify_payment_received, db, payment.id)
 
     return BookingPaymentResponse(
@@ -170,6 +187,44 @@ async def process_booking_payment(
 
 
 # ── Confirm (webhook / status refresh) ───────────────────────────────────────
+
+
+async def _promote_hold_after_payment(db, payment, background_tasks):
+    """Lift a PENDING_HOLD session to SCHEDULED once its payment is confirmed.
+
+    Returns "CONFLICT" if another patient took the slot while the hold was
+    open (the hold is cancelled and an admin refund is flagged); "COMPLETED"
+    when the booking is promoted; None if there is nothing pending.
+    """
+    if not payment.sessionId:
+        return None
+    held = await get_session(db, payment.sessionId)
+    if not held or held.get("status") != "PENDING_HOLD":
+        return None
+    if await is_slot_booked(
+        db,
+        held["therapistId"],
+        held["date"],
+        held["time"],
+        exclude_session_id=held["id"],
+    ):
+        await update_session(db, held["id"], {"status": "CANCELLED"})
+        from app.services.notification import log_admin_notification
+
+        await log_admin_notification(
+            db,
+            category="refund",
+            message=(
+                f"Payment {payment.id} settled but its time slot was taken — "
+                f"session {held['id']} cancelled; refund required."
+            ),
+            action_type="refund",
+            action_id=payment.id,
+        )
+        return "CONFLICT"
+    await update_session(db, held["id"], {"status": "SCHEDULED"})
+    background_tasks.add_task(notify_session_booked, db, held["id"])
+    return "COMPLETED"
 
 
 @router.post(
@@ -217,7 +272,9 @@ async def confirm_payment(
         payment = await update_payment(db, payment.id, updates)
 
     # Log admin notification only on the first transition to COMPLETED.
-    if new_status == PAYMENT_COMPLETED and payment.status != PAYMENT_COMPLETED:
+    # payment.status reflects the just-applied update, so compare against the
+    # target rather than the pre-update value.
+    if new_status == PAYMENT_COMPLETED and payment.status == PAYMENT_COMPLETED:
         from app.services.notification import log_admin_notification
 
         await log_admin_notification(
@@ -230,6 +287,17 @@ async def confirm_payment(
             action_type="payment",
             action_id=payment.id,
         )
+
+        # The slot was never locked while the payment was pending — promote the
+        # hold to a real booking now, or flag a conflict if the slot got taken.
+        promote_result = await _promote_hold_after_payment(
+            db, payment, background_tasks
+        )
+        if promote_result == "CONFLICT":
+            return PaymentConfirmResponse(
+                payment=PaymentResponse.model_validate(payment),
+                result="CONFLICT",
+            )
 
     return PaymentConfirmResponse(
         payment=PaymentResponse.model_validate(payment),
@@ -339,4 +407,6 @@ async def update_payment_status(
 ):
     existing = await get_or_404(db, "payment", payment_id)
     updated = await update_payment(db, payment_id, {"status": new_status})
+    if new_status == PAYMENT_COMPLETED:
+        await _promote_hold_after_payment(db, updated, background_tasks)
     return PaymentResponse.model_validate(updated)

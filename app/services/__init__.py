@@ -24,6 +24,7 @@ from app.services.therapist import (
 from app.services.session import (
     create_session,
     delete_session,
+    expire_stale_pending_holds,
     get_all_sessions,
     get_session,
     get_sessions_for_patient,
