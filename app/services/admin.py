@@ -665,12 +665,16 @@ async def get_admin_bookings(
     limit: int = 10,
     search: str | None = None,
     status: str | None = None,
+    patient_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     sort_by: str | None = None,
     sort_order: str = "desc",
 ):
     where: dict = {}
+
+    if patient_id:
+        where["patientId"] = patient_id
 
     if search:
         where["OR"] = [

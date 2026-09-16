@@ -1,7 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from .conftest import MOCK_PATIENT, MOCK_THERAPIST_USER, MOCK_ADMIN
+from .conftest import MOCK_PATIENT, MOCK_THERAPIST_USER, MOCK_ADMIN, MOCK_SESSION
 
 NOW = datetime(2024, 6, 15, 10, 30, 0)
 
@@ -449,6 +449,39 @@ class TestDeletePatientAdmin:
 
     def test_delete_patient_forbidden_for_non_admin(self, patient_client):
         response = patient_client.delete("/api/v1/admin/patients/patient-1")
+        assert response.status_code == 403
+
+
+class TestAdminBookings:
+    def test_list_bookings_filters_by_patient(self, admin_client, mock_db):
+        from types import SimpleNamespace
+
+        mock_db.session.find_many.return_value = [
+            SimpleNamespace(
+                **{
+                    **{k: getattr(MOCK_SESSION, k) for k in ("id", "patientId", "therapistId", "date", "time", "type", "status", "address", "fee", "notes", "createdAt", "updatedAt")},
+                    "patient": SimpleNamespace(id="patient-1", name="John Doe", phone="9800000001"),
+                    "therapist": SimpleNamespace(
+                        id="therapist-1",
+                        name="Dr. Jane Smith",
+                        user=SimpleNamespace(name="Dr. Jane Smith", phone="9800000002"),
+                    ),
+                }
+            )
+        ]
+        mock_db.session.count.return_value = 1
+
+        response = admin_client.get("/api/v1/admin/bookings?patientId=patient-1")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["patientId"] == "patient-1"
+        captured_kwargs = mock_db.session.find_many.call_args.kwargs
+        assert captured_kwargs["where"]["patientId"] == "patient-1"
+
+    def test_bookings_forbidden_for_non_admin(self, patient_client):
+        response = patient_client.get("/api/v1/admin/bookings")
         assert response.status_code == 403
 
 
