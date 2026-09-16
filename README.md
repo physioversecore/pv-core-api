@@ -292,7 +292,7 @@ Gateway callbacks should **only** be driven by the backend-facing webhook (`app/
 | GET | `/api/v1/therapist/earnings/payouts` | Payout history | Therapist |
 
 ### Admin (60+ endpoints)
-Includes: users CRUD, therapist management, patient management, dashboard stats, bookings (incl. `GET /bookings/new-count?since=` for the sidebar badge), complaints (CRUD, assign, `GET /complaints/new-count?since=`), service areas, performance, verifications, refunds, activity log, payments, payouts, notifications, team, leaves, incidents, analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
+Includes: users CRUD, therapist management, patient management, dashboard stats (+ `GET /dashboard/earnings-trend` with daily/weekly/monthly buckets), bookings (`GET /bookings` accepts `search` — matches patient/therapist names AND raw id / `bk-…` booking ref — plus `status`, `dateFrom`, `dateTo`, `patientId`, `skip`, `limit`; `GET /bookings/new-count?since=` for the sidebar badge), complaints (CRUD, assign, `GET /complaints/new-count?since=`), service areas, performance, verifications, refunds (`GET /refunds` paginates and matches `bk-…` refs; `GET /refunds/stats` for live stat cards), activity log, payments, payouts, notifications, team, leaves, incidents, analytics (stats, bookings-by-zone, cancellation-rate, revenue-trend).
 
 ### Settings
 | Method | Endpoint | Description | Access |

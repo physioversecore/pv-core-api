@@ -66,8 +66,10 @@ Three-layer: **routers → services → Prisma**
 | `products_router` | Products | `/api/v1/products` | Product catalog (admin CRUD) |
 | `cart_router` | Cart | `/api/v1/cart` | Cart CRUD (patient only) |
 | `payments_router` | Payments | `/api/v1/payments` | Payments, booking+payment flow, gateway confirm (`POST /{id}/confirm`), status (`GET /{id}/status`) |
-| `admin_router` | Admin | `/api/v1/admin` | Users, therapists, patients, complaints, service areas, performance, verifications, refunds, activity log |
+| `admin_router` | Admin | `/api/v1/admin` | Users, therapists, patients, complaints, service areas, performance, verifications, refunds (incl. `GET /refunds/stats`), activity log, dashboard earnings-trend |
 | `admin_extras_router` | Admin Extras | `/api/v1/admin` | Payments, payouts, notifications, team, leaves, incidents, analytics |
+
+**Admin bookings/refunds search behavior**: `GET /bookings?search=` matches patient/therapist names **and** the raw session id; a `bk-…`-prefixed search matches by id suffix (`endsWith`, insensitive) so the frontend `bk-` booking reference is searchable. `GET /bookings?patientId=` filters by patient (used by the refunds `BookingPicker`). `GET /refunds` paginates (`skip`/`limit`) and matches `bk-…` refund booking ids the same way. `GET /dashboard/earnings-trend` returns daily/weekly/monthly buckets derived from COMPLETED payments for the admin dashboard chart.
 | `reports_router` | Reports | `/api/v1/reports` | Patient reports with file uploads |
 | `uploads_router` | Uploads | `/api/v1/uploads` | Serve uploaded files |
 | `reviews_router` | Reviews | `/api/v1/reviews` | Patient reviews and ratings |
