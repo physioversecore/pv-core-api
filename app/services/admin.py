@@ -549,7 +549,7 @@ async def get_admin_earnings(db: Prisma) -> dict:
 
     payments = await db.payment.find_many(
         where={
-            "status": "PENDING",
+            "status": "COMPLETED",
             "createdAt": {"gte": month_start.replace(tzinfo=None)},
         }
     )
@@ -559,6 +559,62 @@ async def get_admin_earnings(db: Prisma) -> dict:
         "platform_earnings": total,
         "description": "Platform fees collected this month",
     }
+
+
+async def get_admin_earnings_trend(db: Prisma) -> dict:
+    """Daily (14d), weekly (8w) and monthly (6m) earnings buckets from completed payments."""
+    from collections import defaultdict
+
+    now = datetime.now(timezone.utc)
+    payments = await db.payment.find_many(
+        where={"status": "COMPLETED"},
+        order={"createdAt": "asc"},
+    )
+
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    # ── Daily: last 14 calendar days ────────────────────────────────────────
+    daily = defaultdict(float)
+    for p in payments:
+        if p.createdAt:
+            daily[p.createdAt.date().isoformat()] += p.amount
+    daily_points = []
+    for i in range(13, -1, -1):
+        day = (now - timedelta(days=i)).date()
+        daily_points.append({
+            "label": day.strftime("%d %b"),
+            "amount": round(daily.get(day.isoformat(), 0.0), 2),
+        })
+
+    # ── Weekly: last 8 ISO weeks (Mon–Sun) ─────────────────────────────────
+    today = now.date()
+    monday = today - timedelta(days=today.weekday())
+    weekly_points = []
+    for i in range(7, -1, -1):
+        start = monday - timedelta(weeks=i)
+        end = start + timedelta(days=7)
+        total = sum(
+            p.amount
+            for p in payments
+            if p.createdAt and start <= p.createdAt.date() < end
+        )
+        weekly_points.append({"label": start.strftime("%d %b"), "amount": round(total, 2)})
+
+    # ── Monthly: last 6 months ──────────────────────────────────────────────
+    monthly = defaultdict(float)
+    for p in payments:
+        if p.createdAt:
+            monthly[p.createdAt.strftime("%Y-%m")] += p.amount
+    monthly_points = []
+    for i in range(5, -1, -1):
+        d = now.replace(day=1) - timedelta(days=i * 31)
+        key = d.strftime("%Y-%m")
+        monthly_points.append({
+            "label": month_labels[d.month - 1],
+            "amount": round(monthly.get(key, 0.0), 2),
+        })
+
+    return {"daily": daily_points, "weekly": weekly_points, "monthly": monthly_points}
 
 
 async def get_admin_recent_activity(db: Prisma, limit: int = 10) -> list[dict]:

@@ -141,6 +141,7 @@ from app.services.admin import (
     get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_earnings_trend,
     get_admin_patient,
     get_admin_patients,
     get_admin_performance,

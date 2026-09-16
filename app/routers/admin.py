@@ -25,6 +25,7 @@ from app.models.admin import (
     AdminCreateTherapistRequest,
     AdminDashboardStats,
     AdminEarningsResponse,
+    AdminEarningsTrendResponse,
     AdminPatientData,
     AdminPatientListResponse,
     AdminPatientUpdate,
@@ -63,6 +64,7 @@ from app.services.admin import (
     get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_earnings_trend,
     get_admin_patient,
     get_admin_patients,
     get_admin_performance,
@@ -459,6 +461,14 @@ async def dashboard_earnings(
     db: Prisma = Depends(get_db),
 ):
     return await get_admin_earnings(db)
+
+
+@router.get("/dashboard/earnings-trend", response_model=AdminEarningsTrendResponse)
+async def dashboard_earnings_trend(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    return await get_admin_earnings_trend(db)
 
 
 @router.get("/dashboard/recent-activity", response_model=list[AdminRecentActivity])

@@ -110,6 +110,7 @@ from app.models.admin import (
     AdminCreateTherapistRequest,
     AdminDashboardStats,
     AdminEarningsResponse,
+    AdminEarningsTrendResponse,
     AdminPatientData,
     AdminPatientListResponse,
     AdminPatientUpdate,

@@ -22,6 +22,17 @@ class AdminEarningsResponse(_CamelModel):
     description: str
 
 
+class AdminEarningsTrendPoint(_CamelModel):
+    label: str
+    amount: float
+
+
+class AdminEarningsTrendResponse(_CamelModel):
+    daily: list[AdminEarningsTrendPoint]
+    weekly: list[AdminEarningsTrendPoint]
+    monthly: list[AdminEarningsTrendPoint]
+
+
 class AdminRecentActivity(_CamelModel):
     id: str
     patient_name: str

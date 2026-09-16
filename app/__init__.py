@@ -5,6 +5,7 @@ from app.deps import PaginationParams, get_admin_user, get_current_user, get_cur
 from app.models import (
     AdminDashboardStats,
     AdminEarningsResponse,
+    AdminEarningsTrendResponse,
     AdminPatientData,
     AdminPatientListResponse,
     AdminPatientUpdate,
@@ -176,6 +177,7 @@ from app.services import (
     find_or_create_google_user,
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_earnings_trend,
     get_admin_patient,
     get_admin_patients,
     get_admin_performance,

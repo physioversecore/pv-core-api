@@ -452,6 +452,34 @@ class TestDeletePatientAdmin:
         assert response.status_code == 403
 
 
+class TestEarningsTrendAdmin:
+    def test_earnings_trend(self, admin_client, mock_db):
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+
+        now = datetime.now(timezone.utc)
+        mock_db.payment.find_many.return_value = [
+            SimpleNamespace(id="p1", amount=1000.0, status="COMPLETED", createdAt=now),
+            SimpleNamespace(id="p2", amount=500.0, status="COMPLETED", createdAt=now),
+        ]
+
+        response = admin_client.get("/api/v1/admin/dashboard/earnings-trend")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["daily"]) == 14
+        assert len(body["weekly"]) == 8
+        assert len(body["monthly"]) == 6
+        assert body["daily"][-1]["amount"] == 1500.0
+        assert body["weekly"][-1]["amount"] == 1500.0
+        assert body["monthly"][-1]["amount"] == 1500.0
+        assert all("label" in p and "amount" in p for p in body["daily"])
+
+    def test_earnings_trend_forbidden_for_non_admin(self, patient_client):
+        response = patient_client.get("/api/v1/admin/dashboard/earnings-trend")
+        assert response.status_code == 403
+
+
 class TestVerificationApproval:
     def _verification(self):
         return SimpleNamespace(
