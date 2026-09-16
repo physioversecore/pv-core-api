@@ -114,6 +114,21 @@ class AdminPatientData(BaseModel):
     isActive: bool
     phone: str | None = None
     email: str | None = None
+    # Full patient profile — admins see everything the patient set at
+    # onboarding/signup, and are the only ones allowed to change the
+    # immutable fields (phone, email, dob, gender).
+    photo: str | None = None
+    address: str | None = None
+    history: str | None = None
+    dob: str | None = None
+    age: int | None = None
+    gender: str | None = None
+    condition: str | None = None
+    emergencyName: str | None = None
+    emergencyRelation: str | None = None
+    emergencyPhone: str | None = None
+    notifEmail: bool | None = None
+    notifSms: bool | None = None
 
     class Config:
         from_attributes = True
@@ -130,6 +145,18 @@ class AdminPatientUpdate(BaseModel):
     phone: str | None = None
     email: str | None = None
     isActive: bool | None = None
+    # Only an admin can edit the patient-wide info (incl. the fields the
+    # patient themselves can no longer change).
+    address: str | None = None
+    history: str | None = None
+    dob: str | None = None
+    gender: str | None = None
+    condition: str | None = None
+    emergencyName: str | None = None
+    emergencyRelation: str | None = None
+    emergencyPhone: str | None = None
+    notifEmail: bool | None = None
+    notifSms: bool | None = None
 
 
 class AdminBookingData(BaseModel):

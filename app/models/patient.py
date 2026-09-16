@@ -1,5 +1,3 @@
-from datetime import date
-
 from pydantic import BaseModel, field_validator
 
 
@@ -65,20 +63,20 @@ class PatientProfileResponse(BaseModel):
 
 class PatientProfileUpdate(BaseModel):
     name: str | None = None
-    phone: str | None = None
     city: str | None = None
     address: str | None = None
     history: str | None = None
-    dob: str | None = None
-    gender: str | None = None
     condition: str | None = None
     emergencyName: str | None = None
     emergencyRelation: str | None = None
     emergencyPhone: str | None = None
     notifEmail: bool | None = None
     notifSms: bool | None = None
+    # Deliberately NOT editable by the patient themselves, so a client cannot
+    # write them even by hand: phone, email, date of birth and gender are set
+    # at signup/onboarding and only an admin may change them (AdminPatientUpdate).
 
-    @field_validator("phone", "emergencyPhone")
+    @field_validator("emergencyPhone")
     @classmethod
     def validate_phone(cls, v: str | None) -> str | None:
         if v is None:
@@ -86,26 +84,6 @@ class PatientProfileUpdate(BaseModel):
         digits = "".join(c for c in v if c.isdigit())
         if len(digits) < 7 or len(digits) > 15:
             raise ValueError("Phone number must have 7-15 digits")
-        return v
-
-    @field_validator("dob")
-    @classmethod
-    def validate_dob(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        try:
-            date.fromisoformat(v)
-        except ValueError as exc:
-            raise ValueError("Date of birth must be a valid date (YYYY-MM-DD)") from exc
-        return v
-
-    @field_validator("gender")
-    @classmethod
-    def validate_gender(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        if v not in GENDER_OPTIONS:
-            raise ValueError(f"Gender must be one of: {', '.join(GENDER_OPTIONS)}")
         return v
 
     @field_validator("city")

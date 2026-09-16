@@ -230,7 +230,7 @@ MOCK_NOTIFICATION = SimpleNamespace(
     createdAt=datetime(2026, 9, 1, 9, 0),
 )
 
-TABLES = ["user", "therapist", "session", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification", "notification", "pointtransaction", "clinic", "therapistservicearea", "setting"]
+TABLES = ["user", "therapist", "session", "patientprofile", "product", "cartitem", "payment", "report", "review", "emailverification", "verification", "activitylog", "refund", "complaint", "scheduleblockrequest", "servicearea", "availabilityslot", "recurringpattern", "availabilityblock", "auditlogentry", "adminnotification", "notification", "pointtransaction", "clinic", "therapistservicearea", "setting"]
 METHODS = [
     "find_unique",
     "find_many",

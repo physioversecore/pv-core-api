@@ -402,6 +402,7 @@ class TestListPatientsAdmin:
 class TestUpdatePatientAdmin:
     def test_update_patient(self, admin_client, mock_db):
         mock_db.user.find_unique.return_value = MOCK_PATIENT_WITH_SESSIONS
+        mock_db.patientprofile.find_unique.return_value = None
         mock_db.session.find_many.return_value = []
 
         response = admin_client.put(

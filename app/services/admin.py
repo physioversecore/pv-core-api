@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from prisma import Prisma
 
@@ -411,6 +411,8 @@ async def get_admin_patient(db: Prisma, patient_id: str):
     if not u or u.role != "PATIENT":
         return None
 
+    profile = await db.patientprofile.find_unique(where={"userId": u.id})
+
     sessions_raw = await db.session.find_many(
         where={"patientId": u.id},
         include={"therapist": True},
@@ -425,17 +427,38 @@ async def get_admin_patient(db: Prisma, patient_id: str):
             therapist_name = last_session.therapist.name
             therapist_id_val = last_session.therapist.id
 
+    dob_iso = None
+    age = None
+    if profile and profile.dob:
+        dob_iso = profile.dob.strftime("%Y-%m-%d")
+        today = date.today()
+        age = today.year - profile.dob.year - (
+            (today.month, today.day) < (profile.dob.month, profile.dob.day)
+        )
+
     return {
         "id": u.id,
         "name": u.name,
-        "city": u.city or "",
+        "city": u.city or (profile.city if profile else ""),
         "sessions": session_count,
         "therapist": therapist_name,
         "therapistId": therapist_id_val,
         "joined": u.createdAt.strftime("%Y-%m-%d") if u.createdAt else "",
         "isActive": u.status == "APPROVED",
-        "phone": u.phone,
-        "email": u.email,
+        "phone": getattr(u, "phone", None),
+        "email": getattr(u, "email", None),
+        "photo": profile.photo if profile else None,
+        "address": profile.address if profile else None,
+        "history": profile.history if profile else None,
+        "dob": dob_iso,
+        "age": age,
+        "gender": getattr(profile, "gender", None) if profile else None,
+        "condition": getattr(u, "condition", None),
+        "emergencyName": profile.emergencyName if profile else None,
+        "emergencyRelation": profile.emergencyRelation if profile else None,
+        "emergencyPhone": profile.emergencyPhone if profile else None,
+        "notifEmail": profile.notifEmail if profile else None,
+        "notifSms": profile.notifSms if profile else None,
     }
 
 
@@ -453,11 +476,40 @@ async def update_admin_patient(db: Prisma, patient_id: str, data: dict):
         user_fields["phone"] = data["phone"]
     if "email" in data:
         user_fields["email"] = data["email"]
+    if "condition" in data:
+        user_fields["condition"] = data["condition"]
     if "isActive" in data:
         user_fields["status"] = "APPROVED" if data["isActive"] else "REJECTED"
 
     if user_fields:
-        await db.user.update(where={"id": patient_id}, data=user_fields)
+        u = await db.user.update(where={"id": patient_id}, data=user_fields)
+
+    profile = await db.patientprofile.find_unique(where={"userId": u.id})
+
+    profile_fields = {}
+    for key in ("address", "history", "gender", "emergencyName",
+                "emergencyRelation", "emergencyPhone", "notifEmail", "notifSms"):
+        if key in data:
+            profile_fields[key] = data[key]
+    if "dob" in data:
+        dob = data["dob"]
+        profile_fields["dob"] = (
+            datetime.fromisoformat(dob) if dob else None
+        )
+
+    if profile_fields:
+        if profile:
+            await db.patientprofile.update(where={"userId": u.id}, data=profile_fields)
+        else:
+            await db.patientprofile.create(
+                data={
+                    "userId": u.id,
+                    "name": u.name or "Patient",
+                    "phone": u.phone or "",
+                    "city": u.city or "Kathmandu",
+                    **profile_fields,
+                }
+            )
 
     return await get_admin_patient(db, patient_id)
 

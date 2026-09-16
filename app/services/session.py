@@ -9,6 +9,8 @@ def _enrich_session(s):
         d["therapistName"] = ""
         if hasattr(s, "therapist") and s.therapist:
             d["therapistName"] = s.therapist.name if s.therapist.name else ""
+            d["therapistSpecialty"] = getattr(s.therapist, "specialty", "") or ""
+            d["therapistLicenseNumber"] = getattr(s.therapist, "licenseNumber", "") or ""
         patient = getattr(s, "patient", None)
         d["patientName"] = patient.name if patient and patient.name else ""
         d["patientPhone"] = patient.phone if patient and patient.phone else ""
