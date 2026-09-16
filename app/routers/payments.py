@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -28,6 +28,8 @@ from app import (
     get_therapist_by_user,
     is_gateway_method,
     normalize_method,
+    notify_payment_received,
+    notify_session_booked,
     pagination_params,
     update_payment,
 )
@@ -49,6 +51,7 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 )
 async def process_booking_payment(
     data: BookingPaymentRequest,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
@@ -152,6 +155,12 @@ async def process_booking_payment(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Payment gateway error: {exc}",
             )
+
+    # The booking and the receipt are two different pieces of news: one says a
+    # therapist is coming, the other that the money left. Both are backgrounded
+    # so neither can cost the patient their confirmed booking.
+    background_tasks.add_task(notify_session_booked, db, session["id"])
+    background_tasks.add_task(notify_payment_received, db, payment.id)
 
     return BookingPaymentResponse(
         session=SessionPaymentResponse.model_validate(session),
@@ -257,6 +266,7 @@ async def get_payment_status(
 )
 async def make_payment(
     data: PaymentCreate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
@@ -276,6 +286,10 @@ async def make_payment(
             "billingCountry": data.billingCountry,
         },
     )
+    # Only a settled payment is worth a receipt; this endpoint also records
+    # ones that land PENDING.
+    if getattr(payment, "status", None) == "COMPLETED":
+        background_tasks.add_task(notify_payment_received, db, payment.id)
     return PaymentResponse.model_validate(payment)
 
 
@@ -319,9 +333,10 @@ async def get_payment_by_id(
 async def update_payment_status(
     payment_id: str,
     new_status: str,
+    background_tasks: BackgroundTasks,
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    await get_or_404(db, "payment", payment_id)
+    existing = await get_or_404(db, "payment", payment_id)
     updated = await update_payment(db, payment_id, {"status": new_status})
     return PaymentResponse.model_validate(updated)

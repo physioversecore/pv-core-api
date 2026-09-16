@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -13,6 +13,7 @@ from app import (
     get_rate_changes_for_admin,
     get_therapist_by_user,
     get_therapist_rate_changes,
+    notify_rate_change_decided,
     reject_rate_change,
 )
 from app.deps import get_admin_user
@@ -60,6 +61,7 @@ async def list_rate_changes(
 @router.put("/{request_id}/approve")
 async def approve_request(
     request_id: str,
+    background_tasks: BackgroundTasks,
     data: dict = {},
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
@@ -67,12 +69,21 @@ async def approve_request(
     result = await approve_rate_change(db, request_id, data.get("adminNotes", ""))
     if not result.get("success"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
+    background_tasks.add_task(
+        notify_rate_change_decided,
+        db,
+        request_id,
+        therapist_id=result["therapistId"],
+        approved=True,
+        new_rate=result.get("newRate"),
+    )
     return result
 
 
 @router.put("/{request_id}/reject")
 async def reject_request(
     request_id: str,
+    background_tasks: BackgroundTasks,
     data: dict = {},
     _=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
@@ -80,4 +91,12 @@ async def reject_request(
     result = await reject_rate_change(db, request_id, data.get("adminNotes", ""))
     if not result.get("success"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
+    background_tasks.add_task(
+        notify_rate_change_decided,
+        db,
+        request_id,
+        therapist_id=result["therapistId"],
+        approved=False,
+        admin_notes=data.get("adminNotes", ""),
+    )
     return result

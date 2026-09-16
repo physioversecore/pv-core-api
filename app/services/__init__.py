@@ -88,6 +88,27 @@ from app.services.user_notification import (
     mark_all_read,
     mark_read,
 )
+from app.services.notification_events import (
+    NotificationType,
+    RefType,
+    notify_application_decided,
+    notify_block_request_decided,
+    notify_payment_received,
+    notify_points_matured,
+    notify_rate_change_decided,
+    notify_referral_joined,
+    notify_referral_rewarded,
+    notify_refund_decided,
+    notify_refund_opened,
+    notify_report_uploaded,
+    notify_session_booked,
+    notify_session_cancelled,
+    notify_session_completed,
+    notify_session_rescheduled,
+    notify_session_status_change,
+    notify_once,
+    safe_notify,
+)
 from app.services.report import (
     create_report,
     delete_report,
@@ -134,6 +155,10 @@ from app.services.admin import (
     update_admin_therapist,
 )
 from app.services.availability import (
+    BULK_SLOT_STATUSES,
+    BulkSlotRangeError,
+    MAX_BULK_THERAPISTS,
+    MAX_BULK_WINDOW_DAYS,
     apply_recurring_pattern,
     apply_schedule,
     approve_block_request,
@@ -146,6 +171,7 @@ from app.services.availability import (
     delete_recurring_pattern,
     generate_availability,
     get_audit_entries,
+    get_bulk_slots_for_range,
     get_monthly_availability,
     get_pending_block_requests,
     get_recurring_patterns,

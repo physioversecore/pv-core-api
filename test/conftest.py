@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app import get_admin_user, get_current_user, get_db
 from app.routers import (
     admin_router,
+    availability_router,
     notifications_router,
     auth_router,
     cart_router,
@@ -50,6 +51,7 @@ _test_app.include_router(reports_router, prefix="/api/v1")
 _test_app.include_router(reviews_router, prefix="/api/v1")
 _test_app.include_router(uploads_router, prefix="/api/v1")
 _test_app.include_router(notifications_router, prefix="/api/v1")
+_test_app.include_router(availability_router, prefix="/api/v1")
 
 
 @_test_app.get("/health")
