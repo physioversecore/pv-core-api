@@ -33,7 +33,7 @@ ESEWA_BOOKING_DATA = {
 class TestProcessBooking:
     def test_process_conflict_returns_409(self, patient_client, mock_db):
         mock_db.familymember.find_unique.return_value = None
-        mock_db.session.find_many.return_value = [MOCK_PAYMENT]
+        mock_db.session.count.return_value = 1
 
         response = patient_client.post(
             "/api/v1/payments/process", json=BOOKING_PROCESS_DATA

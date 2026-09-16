@@ -64,8 +64,8 @@ async def is_slot_booked(
     }
     if exclude_session_id:
         where["id"] = {"not": exclude_session_id}
-    existing = await db.session.find_many(where=where, select={"id": True})
-    return len(existing) > 0
+    existing = await db.session.count(where=where)
+    return existing > 0
 
 
 async def create_session(db: Prisma, data: dict):

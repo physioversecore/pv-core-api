@@ -65,7 +65,7 @@ Three-layer: **routers → services → Prisma**
 | `sessions_router` | Sessions | `/api/v1/sessions` | Session CRUD, reschedule |
 | `products_router` | Products | `/api/v1/products` | Product catalog (admin CRUD) |
 | `cart_router` | Cart | `/api/v1/cart` | Cart CRUD (patient only) |
-| `payments_router` | Payments | `/api/v1/payments` | Payments, booking+payment flow |
+| `payments_router` | Payments | `/api/v1/payments` | Payments, booking+payment flow, gateway confirm (`POST /{id}/confirm`), status (`GET /{id}/status`) |
 | `admin_router` | Admin | `/api/v1/admin` | Users, therapists, patients, complaints, service areas, performance, verifications, refunds, activity log |
 | `admin_extras_router` | Admin Extras | `/api/v1/admin` | Payments, payouts, notifications, team, leaves, incidents, analytics |
 | `reports_router` | Reports | `/api/v1/reports` | Patient reports with file uploads |
@@ -89,6 +89,13 @@ Three-layer: **routers → services → Prisma**
 - **OTP flow**: `app/services/otp.py` generates 6-digit code, stores in `EmailVerification` table, sends via email provider. `send_otp()` invalidates previous unused codes. `verify_otp()` checks code, expiry, and max attempts. Signup endpoint verifies a prior successful OTP before creating the account.
 - **SMTP config**: Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_NAME`, `SMTP_FROM_EMAIL` in `.env`. For Gmail, use an App Password (not regular password).
 
+### Payment gateways (eSewa / Khalti)
+
+- **Selection** (`app/services/payments/gateway.py`): `GATEWAY_METHODS = ("esewa", "khalti")`. Anything else (cash, card, connectips, …) falls back to the **manual** path — payment is `COMPLETED` immediately on booking. `connectips` stays manual until the NCHL rail (Phase 2) is implemented, else bookings would be left `PENDING` with no gateway. Legacy `imepay` values are aliased to `khalti` (`_METHOD_ALIASES`).
+- **Initiation**: `POST /payments/process` creates the session + payment (`PENDING` for gateway methods), then `gateway.initiate()` returns a `GatewayInitiation` (`type: "redirect" | "form" | "manual"`, url, signed `form_fields`). Missing credentials → `GatewayConfigError` → **HTTP 503** (never silently marks a booking as paid).
+- **Verification**: `POST /payments/{id}/confirm` calls `gateway.verify()`; a transition to `COMPLETED` logs the admin notification once. Idempotent (`already_completed`). Gateways live in `app/services/payments/{esewa,khalti,manual}.py` behind the `PaymentGateway` interface, registered in `registry.py` (uses `settings.ESEWA_SECRET_KEY`, `settings.KHALTI_SECRET_KEY`).
+- **Payment intent for gateways never comes from the browser** — the frontend webhook (`app/api/webhooks/payments/[vendor]/route.ts` on the Next.js side) triggers `confirm`; a plain `GET /payments/{id}/status` only polls the stored status.
+
 ### Session statuses
 
 `SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`, `RESCHEDULE_REQUESTED`, `DECLINE_REQUESTED`
@@ -101,7 +108,7 @@ Sessions returned by the API include `therapistName`, `patientName`, `patientPho
 
 Two patients can never book the same time slot of the same therapist. Enforced at three layers:
 
-1. **Application check** — `create_session()` calls `is_slot_booked()` (`app/services/session.py`) before inserting, rejecting if an active (`SCHEDULED`/`IN_PROGRESS`) session already exists for `therapistId` + `date` + `time`. It raises `ValueError("CONFLICT")`.
+1. **Application check** — `create_session()` calls `is_slot_booked()` (`app/services/session.py`) before inserting, rejecting if an active (`SCHEDULED`/`IN_PROGRESS`) session already exists for `therapistId` + `date` + `time`. Uses `db.session.count()` for the check (Prisma `find_many` does not support a `select` kwarg). It raises `ValueError("CONFLICT")`.
 2. **Router mapping** — both `POST /sessions` and `POST /payments/process` translate `ValueError("CONFLICT")` into **HTTP 409** with `"That time slot was just booked — please choose another."` (family-member errors remain 400).
 3. **DB constraint** — a **unique index** `Session_therapistId_date_time_key` on `(therapistId, date, time)` (migration `20260901000000_session_slot_unique`) makes the guarantee race-safe at the database level; cancelled sessions are hard-deleted so the slot frees up.
 
@@ -156,7 +163,7 @@ All seed scripts (12 total):
 - `seed-reviews.py` — patient reviews
 - `seed-therapist-dashboard.py` — dashboard data
 - `seed-schedule.py` — availability slots
-- `seed-settings.py` — design tokens, currencies, payment methods
+- `seed-settings.py` — design tokens, currencies, payment methods (idempotently **prunes a stale `imepay` entry** from the `payment-methods` setting — IME Pay merged into Khalti)
 - `seed-referral-codes.py` — referral codes
 - `seed-patient-profiles.py` — patient profiles
 - `seed-refunds.py` — refund records
