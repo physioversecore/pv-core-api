@@ -678,6 +678,7 @@ async def get_admin_bookings(
 
     if search:
         where["OR"] = [
+            {"id": {"contains": search, "mode": "insensitive"}},
             {"patient": {"name": {"contains": search, "mode": "insensitive"}}},
             {"therapist": {"name": {"contains": search, "mode": "insensitive"}}},
         ]
