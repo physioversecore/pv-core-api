@@ -676,7 +676,9 @@ async def get_admin_bookings(
     if patient_id:
         where["patientId"] = patient_id
 
-    if search:
+    if search and search.lower().startswith("bk-"):
+        where["id"] = {"endsWith": search[3:].lower(), "mode": "insensitive"}
+    elif search:
         where["OR"] = [
             {"id": {"contains": search, "mode": "insensitive"}},
             {"patient": {"name": {"contains": search, "mode": "insensitive"}}},

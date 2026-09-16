@@ -484,6 +484,16 @@ class TestAdminBookings:
         response = patient_client.get("/api/v1/admin/bookings")
         assert response.status_code == 403
 
+    def test_bookings_search_matches_booking_ref(self, admin_client, mock_db):
+        mock_db.session.find_many.return_value = []
+        mock_db.session.count.return_value = 0
+
+        response = admin_client.get("/api/v1/admin/bookings?search=bk-ABC123XY")
+
+        assert response.status_code == 200
+        captured_kwargs = mock_db.session.find_many.call_args.kwargs
+        assert captured_kwargs["where"] == {"id": {"endsWith": "abc123xy", "mode": "insensitive"}}
+
 
 class TestEarningsTrendAdmin:
     def test_earnings_trend(self, admin_client, mock_db):
