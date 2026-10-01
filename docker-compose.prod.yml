@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     ports:
       - "5432:5432"
@@ -17,6 +17,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - pv-network
 
   api:
     build:
@@ -37,13 +39,15 @@ services:
     command: >
       sh -c "uv run prisma db push && python main.py"
     restart: unless-stopped
+    networks:
+      - pv-network
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --appendonly yes --appendfsync everysec  --save 60 1000
+    command: redis-server --appendonly yes --appendfsync everysec --save 60 1000
     volumes:
       - redis-data:/data
     healthcheck:
@@ -51,13 +55,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-
+    networks:
+      - pv-network
 
 volumes:
   redis-data:
-      driver: local
+    driver: local
+
   pgdata:
     driver: local
+
   uploads_data:
     driver: local
+
+networks:
+  pv-network:
+    external: true
