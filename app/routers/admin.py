@@ -9,6 +9,9 @@ from app import (
     get_current_user,
     get_db,
     get_or_404,
+    notify_application_decided,
+    notify_refund_decided,
+    notify_refund_opened,
     pagination_params,
 )
 from app.services.email.notifications import (
@@ -22,6 +25,7 @@ from app.models.admin import (
     AdminCreateTherapistRequest,
     AdminDashboardStats,
     AdminEarningsResponse,
+    AdminEarningsTrendResponse,
     AdminPatientData,
     AdminPatientListResponse,
     AdminPatientUpdate,
@@ -60,6 +64,7 @@ from app.services.admin import (
     get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_earnings_trend,
     get_admin_patient,
     get_admin_patients,
     get_admin_performance,
@@ -283,7 +288,7 @@ async def approve_therapist_admin(
         action_type="therapist",
         action_id=therapist_id,
     )
-    _, user = await resolve_therapist_user(db, therapist_id)
+    therapist_row, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "APPROVED":
         temp_password = None
         if getattr(user, "mustChangePassword", False):
@@ -294,6 +299,17 @@ async def approve_therapist_admin(
             user.name,
             temp_password,
             user.email,
+        )
+        # The in-app twin of that email. The producer dedupes on the therapist
+        # id, so re-approving an already-approved account -- which this
+        # endpoint happily allows -- does not stack a second row.
+        background_tasks.add_task(
+            notify_application_decided,
+            db,
+            user_id=user.id,
+            user_name=user.name,
+            therapist_id=getattr(therapist_row, "id", None) or therapist_id,
+            approved=True,
         )
     return result
 
@@ -321,13 +337,22 @@ async def reject_therapist_admin(
         action_type="therapist",
         action_id=therapist_id,
     )
-    _, user = await resolve_therapist_user(db, therapist_id)
+    therapist_row, user = await resolve_therapist_user(db, therapist_id)
     if user and user.status == "REJECTED":
         background_tasks.add_task(
             send_application_rejected_email,
             user.email,
             user.name,
             data.note or "",
+        )
+        background_tasks.add_task(
+            notify_application_decided,
+            db,
+            user_id=user.id,
+            user_name=user.name,
+            therapist_id=getattr(therapist_row, "id", None) or therapist_id,
+            approved=False,
+            note=data.note or "",
         )
     return result
 
@@ -438,6 +463,14 @@ async def dashboard_earnings(
     return await get_admin_earnings(db)
 
 
+@router.get("/dashboard/earnings-trend", response_model=AdminEarningsTrendResponse)
+async def dashboard_earnings_trend(
+    _=Depends(get_admin_user),
+    db: Prisma = Depends(get_db),
+):
+    return await get_admin_earnings_trend(db)
+
+
 @router.get("/dashboard/recent-activity", response_model=list[AdminRecentActivity])
 async def dashboard_recent_activity(
     limit: int = 10,
@@ -453,6 +486,7 @@ async def list_bookings_admin(
     limit: int = 10,
     search: str | None = None,
     status: str | None = None,
+    patientId: str | None = None,
     dateFrom: str | None = None,
     dateTo: str | None = None,
     sortBy: str | None = None,
@@ -466,6 +500,7 @@ async def list_bookings_admin(
         limit=limit,
         search=search,
         status=status,
+        patient_id=patientId,
         date_from=dateFrom,
         date_to=dateTo,
         sort_by=sortBy,
@@ -887,12 +922,29 @@ async def update_verification_endpoint(
                 temp_password,
                 user.email,
             )
+            background_tasks.add_task(
+                notify_application_decided,
+                db,
+                user_id=user.id,
+                user_name=user.name,
+                therapist_id=existing.therapistId,
+                approved=True,
+            )
         elif new_status == "Rejected":
             background_tasks.add_task(
                 send_application_rejected_email,
                 user.email,
                 user.name,
                 payload.get("note") or "",
+            )
+            background_tasks.add_task(
+                notify_application_decided,
+                db,
+                user_id=user.id,
+                user_name=user.name,
+                therapist_id=existing.therapistId,
+                approved=False,
+                note=payload.get("note") or "",
             )
 
     new_status = payload.get("status")
@@ -995,6 +1047,7 @@ async def get_refund_by_id(
 @router.post("/refunds", response_model=RefundResponse, status_code=status.HTTP_201_CREATED)
 async def create_refund_endpoint(
     data: RefundCreate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
@@ -1010,6 +1063,16 @@ async def create_refund_endpoint(
         message=f"Refund requested (Rs {data.amount:,.0f}) by {patient.name}",
         action_type="refund",
         action_id=result["id"],
+    )
+    # The admin feed above tells the office; this tells the patient whose
+    # money it is.
+    background_tasks.add_task(
+        notify_refund_opened,
+        db,
+        result["id"],
+        patient_user_id=data.patientId,
+        amount=data.amount,
+        booking_id=data.bookingId,
     )
     return RefundResponse(**result)
 
@@ -1027,10 +1090,11 @@ async def create_manual_refund_case(
 async def update_refund_by_id(
     refund_id: str,
     data: RefundUpdate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_admin_user),
     db: Prisma = Depends(get_db),
 ):
-    await get_or_404(db, "refund", refund_id)
+    existing = await get_or_404(db, "refund", refund_id)
     updated = await update_refund(db, refund_id, data.model_dump(exclude_none=True))
     action = "UPDATE_REFUND"
     if data.status:
@@ -1038,6 +1102,23 @@ async def update_refund_by_id(
             action = "APPROVE_REFUND"
         elif data.status == "Denied":
             action = "DENY_REFUND"
+    # Only a decision is news. This endpoint is also used to correct amounts
+    # and notes, and re-saving a decided refund must not tell the patient
+    # twice -- hence the transition guard as well as the producer's own key.
+    previous_status = getattr(existing, "status", None)
+    if action in ("APPROVE_REFUND", "DENY_REFUND") and previous_status not in (
+        "APPROVED",
+        "DENIED",
+    ):
+        background_tasks.add_task(
+            notify_refund_decided,
+            db,
+            refund_id,
+            patient_user_id=updated.get("patientId"),
+            decision="APPROVED" if action == "APPROVE_REFUND" else "DENIED",
+            amount=updated.get("amount"),
+            deny_reason=updated.get("denyReason"),
+        )
     await log_admin_activity(db, current_user.id, action, "Refund", refund_id, {"status": data.status})
     return RefundResponse(**updated)
 

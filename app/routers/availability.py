@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -11,7 +11,11 @@ from app import (
     BlockInfoResponse,
     BlockRangeRequest,
     BlockRangeResponse,
+    BulkSlotRangeResponse,
+    BulkSlotRangeError,
     BulkSlotUpdate,
+    BULK_SLOT_STATUSES,
+    get_bulk_slots_for_range,
     GenerateAvailabilityRequest,
     get_therapist,
     MonthlyGridResponse,
@@ -38,6 +42,7 @@ from app import (
     delete_audit_entry,
     delete_recurring_pattern,
     generate_availability,
+    notify_block_request_decided,
     get_audit_entries,
     get_current_user,
     get_db,
@@ -243,6 +248,55 @@ async def get_slots_range(
     return await get_slots_for_range(db, target.id, from_date, to_date)
 
 
+@router.get("/slots/bulk", response_model=BulkSlotRangeResponse)
+async def get_bulk_slots_range(
+    from_date: str,
+    to_date: str,
+    therapist_ids: list[str] = Query(default_factory=list),
+    status_filter: list[str] = Query(default_factory=list, alias="status"),
+    include_slots: bool = True,
+    current_user=Depends(get_current_user),
+    db: Prisma = Depends(get_db),
+):
+    """Slots for many therapists in one call — discovery's "who is free at T?".
+
+    Authenticated like every other availability read. `therapist_ids` may be
+    repeated or comma-separated; ids that cannot be answered come back under
+    `unavailable` rather than failing the request.
+    """
+    ids: list[str] = []
+    for raw in therapist_ids:
+        ids.extend(part.strip() for part in raw.split(",") if part.strip())
+
+    wanted: list[str] = []
+    for raw in status_filter:
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if part == "all":
+                wanted = list(BULK_SLOT_STATUSES)
+                break
+            if part not in BULK_SLOT_STATUSES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"status must be one of {', '.join(BULK_SLOT_STATUSES)} or all",
+                )
+            wanted.append(part)
+
+    try:
+        return await get_bulk_slots_for_range(
+            db,
+            ids,
+            from_date,
+            to_date,
+            statuses=wanted or None,
+            include_slots=include_slots,
+        )
+    except BulkSlotRangeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
 @router.get("/working-days")
 async def get_working_days_endpoint(
     current_user=Depends(get_current_user),
@@ -316,22 +370,49 @@ async def list_block_requests(
 @router.put("/block-requests/{request_id}/approve")
 async def approve_request(
     request_id: str,
+    background_tasks: BackgroundTasks,
     data: dict = {},
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     if current_user.role != Role.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return await approve_block_request(db, request_id, data.get("adminNotes", ""))
+    result = await approve_block_request(db, request_id, data.get("adminNotes", ""))
+    # The service does not refuse a second approval, so the producer's
+    # once-per-request key is what stops a duplicate landing in the feed.
+    if result.get("success"):
+        background_tasks.add_task(
+            notify_block_request_decided,
+            db,
+            request_id,
+            therapist_id=result.get("therapistId"),
+            approved=True,
+            date_from=result.get("dateFrom", ""),
+            date_to=result.get("dateTo", ""),
+        )
+    return result
 
 
 @router.put("/block-requests/{request_id}/reject")
 async def reject_request(
     request_id: str,
+    background_tasks: BackgroundTasks,
     data: dict = {},
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
 ):
     if current_user.role != Role.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    return await reject_block_request(db, request_id, data.get("adminNotes", ""))
+    result = await reject_block_request(db, request_id, data.get("adminNotes", ""))
+    if result.get("success"):
+        background_tasks.add_task(
+            notify_block_request_decided,
+            db,
+            request_id,
+            therapist_id=result.get("therapistId"),
+            approved=False,
+            date_from=result.get("dateFrom", ""),
+            date_to=result.get("dateTo", ""),
+            admin_notes=data.get("adminNotes", ""),
+        )
+    return result

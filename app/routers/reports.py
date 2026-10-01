@@ -1,7 +1,16 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from prisma import Prisma
 from prisma.enums import Role
 
@@ -16,6 +25,7 @@ from app import (
     get_or_404,
     get_reports_for_patient,
     get_reports_for_therapist,
+    notify_report_uploaded,
     pagination_params,
     settings,
     update_report,
@@ -63,6 +73,7 @@ async def _save_files(patient_id: str, files: list[UploadFile]) -> list[str]:
     "", response_model=ReportResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_new_report(
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Prisma = Depends(get_db),
     # ── form fields (ignored when JSON body is sent) ──
@@ -95,6 +106,17 @@ async def create_new_report(
             **({"sessionId": sessionId} if sessionId else {}),
             **({"fileUrl": fileUrl} if fileUrl else {}),
         })
+
+        # The patient has no other signal that a report landed -- nothing is
+        # emailed for this, and the reports screen is not a place they check.
+        background_tasks.add_task(
+            notify_report_uploaded,
+            db,
+            report.id,
+            patient_user_id=patientId,
+            title=title,
+            therapist_name=getattr(therapist, "name", "") if therapist else "",
+        )
     else:
         # ── fallback: should not happen from the new frontend,
         #    but kept for backward compat with raw JSON calls ──

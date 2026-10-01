@@ -24,6 +24,7 @@ from app.services.therapist import (
 from app.services.session import (
     create_session,
     delete_session,
+    expire_stale_pending_holds,
     get_all_sessions,
     get_session,
     get_sessions_for_patient,
@@ -52,6 +53,19 @@ from app.services.payment import (
     get_payments_for_user,
     update_payment,
 )
+from app.services.payments import (
+    CANCELLED,
+    COMPLETED,
+    FAILED,
+    PENDING,
+    REFUNDED,
+    GatewayConfigError,
+    GatewayError,
+    get_gateway,
+    is_gateway_method,
+    normalize_method,
+    shutdown_gateway_clients,
+)
 from app.services.coverage import (
     clinics_in_area,
     haversine_km,
@@ -74,6 +88,27 @@ from app.services.user_notification import (
     list_notifications,
     mark_all_read,
     mark_read,
+)
+from app.services.notification_events import (
+    NotificationType,
+    RefType,
+    notify_application_decided,
+    notify_block_request_decided,
+    notify_payment_received,
+    notify_points_matured,
+    notify_rate_change_decided,
+    notify_referral_joined,
+    notify_referral_rewarded,
+    notify_refund_decided,
+    notify_refund_opened,
+    notify_report_uploaded,
+    notify_session_booked,
+    notify_session_cancelled,
+    notify_session_completed,
+    notify_session_rescheduled,
+    notify_session_status_change,
+    notify_once,
+    safe_notify,
 )
 from app.services.report import (
     create_report,
@@ -106,6 +141,7 @@ from app.services.admin import (
     get_admin_bookings,
     get_admin_dashboard_stats,
     get_admin_earnings,
+    get_admin_earnings_trend,
     get_admin_patient,
     get_admin_patients,
     get_admin_performance,
@@ -121,6 +157,10 @@ from app.services.admin import (
     update_admin_therapist,
 )
 from app.services.availability import (
+    BULK_SLOT_STATUSES,
+    BulkSlotRangeError,
+    MAX_BULK_THERAPISTS,
+    MAX_BULK_WINDOW_DAYS,
     apply_recurring_pattern,
     apply_schedule,
     approve_block_request,
@@ -133,6 +173,7 @@ from app.services.availability import (
     delete_recurring_pattern,
     generate_availability,
     get_audit_entries,
+    get_bulk_slots_for_range,
     get_monthly_availability,
     get_pending_block_requests,
     get_recurring_patterns,

@@ -176,11 +176,16 @@ Cart is user-specific and dynamic — no seed data required. Users add items via
 | `id` | cuid | Auto-generated |
 | `userId` | String | FK → User.id |
 | `amount` | Float | |
-| `status` | String | Default "PENDING" |
+| `status` | String | "PENDING" |
 | `method` | String | Default "CASH" |
 | `sessionId` | String? | Optional FK → Session.id |
+| `transactionRef` | String? | Gateway transaction ref / Khalti `pidx` (on initiation) |
 
-Payments are created during booking flow — no seed data required.
+Payments are created during the booking+payment combo flow — no seed data required:
+
+- **Manual methods** (cash, card, connectips, …) → payment created as `COMPLETED` immediately.
+- **Gateway methods** (`esewa`, `khalti`) → payment created as `PENDING`, the API returns a gateway `initiation`, and the status flips to `COMPLETED` only after server-side verification via `POST /payments/{id}/confirm` (fired by the frontend webhook).
+- **IME Pay was removed** as a payment method (merged into Khalti — "Khalti by IME"). The `payment-methods` setting seeds 9 methods; `scripts/seed-settings.py` idempotently prunes a stale `imepay` entry from an already-seeded DB row. The backend keeps an `imepay → khalti` alias so legacy `IMEPAY` payments still route to the Khalti gateway.
 
 ---
 
@@ -253,6 +258,9 @@ This seeds 14 users + 8 therapist profiles. For products, sessions, and reports,
 | Get current user | GET | `/api/v1/auth/me` | JWT |
 | List sessions | GET | `/api/v1/sessions?skip=0&limit=100` | JWT |
 | Create session | POST | `/api/v1/sessions` | JWT (PATIENT) |
+| Booking + payment | POST | `/api/v1/payments/process` | JWT (PATIENT) |
+| Confirm gateway payment | POST | `/api/v1/payments/{id}/confirm` | Owner/Admin |
+| Payment status | GET | `/api/v1/payments/{id}/status` | Owner/Admin |
 | Get cart | GET | `/api/v1/cart` | JWT |
 | Add to cart | POST | `/api/v1/cart` | JWT |
 | Admin: list users | GET | `/api/v1/admin/users?role=THERAPIST` | JWT (ADMIN) |

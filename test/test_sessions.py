@@ -15,7 +15,7 @@ SESSION_CREATE_DATA = {
 
 class TestCreateSession:
     def test_create_by_patient(self, patient_client, mock_db):
-        mock_db.session.find_many.return_value = []
+        mock_db.session.count.return_value = 0
         mock_db.session.create.return_value = MOCK_SESSION
 
         response = patient_client.post("/api/v1/sessions", json=SESSION_CREATE_DATA)
@@ -24,7 +24,7 @@ class TestCreateSession:
         assert response.json()["id"] == "session-1"
 
     def test_create_conflict_returns_409(self, patient_client, mock_db):
-        mock_db.session.find_many.return_value = [MOCK_SESSION]
+        mock_db.session.count.return_value = 1
 
         response = patient_client.post("/api/v1/sessions", json=SESSION_CREATE_DATA)
 

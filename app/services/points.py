@@ -281,14 +281,28 @@ async def mature_pending(db: Prisma, user_id: str) -> int:
     Done on read rather than by a scheduler: a balance is only observed when
     someone looks at it, so a cron job would buy nothing and add a moving part
     to operate.
+
+    The rows are read before they are flipped so the user can be told how many
+    points cleared. That read is on the same index as the write, and the
+    notification is naturally once-only -- PENDING becomes AVAILABLE exactly
+    once, so the same points can never be announced twice.
     """
     config = await get_config(db)
     hold_days = int(config["holdDays"])
     cutoff = datetime.now(timezone.utc) - timedelta(days=hold_days)
-    return await db.pointtransaction.update_many(
-        where={"userId": user_id, "status": "PENDING", "createdAt": {"lte": cutoff}},
-        data={"status": "AVAILABLE"},
-    )
+    where = {"userId": user_id, "status": "PENDING", "createdAt": {"lte": cutoff}}
+
+    maturing = await db.pointtransaction.find_many(where=where)
+    moved = await db.pointtransaction.update_many(where=where, data={"status": "AVAILABLE"})
+
+    cleared = sum(row.delta for row in (maturing or []) if row.delta > 0)
+    if cleared > 0:
+        from app.services.notification_events import notify_points_matured
+
+        # Swallows on failure -- a balance read must never fail because of a
+        # notification.
+        await notify_points_matured(db, user_id, cleared)
+    return moved
 
 
 async def reverse_for_session(db: Prisma, session_id: str, reason: str) -> int:

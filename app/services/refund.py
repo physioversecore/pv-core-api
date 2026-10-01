@@ -71,7 +71,9 @@ async def get_refunds(
                 where["createdAt"] = {"lte": dt_to}
         except (ValueError, TypeError):
             pass
-    if search:
+    if search and search.lower().startswith("bk-"):
+        where["bookingId"] = {"endsWith": search[3:].lower(), "mode": "insensitive"}
+    elif search:
         where["OR"] = [
             {"patient": {"name": {"contains": search, "mode": "insensitive"}}},
             {"bookingId": {"contains": search, "mode": "insensitive"}},

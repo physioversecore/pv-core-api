@@ -133,7 +133,38 @@ async def get_therapist_slots(
     db: Prisma = Depends(get_db),
 ):
     therapist = await get_or_404(db, "therapist", therapist_id)
-    return await get_slots_for_range(db, therapist.id, from_date, to_date)
+    result = await get_slots_for_range(db, therapist.id, from_date, to_date)
+
+    # A booked slot carries the patient's name, phone, fee and session id, and
+    # this endpoint admits any authenticated user -- so a patient could read
+    # another patient's contact details out of any therapist's calendar. The
+    # owning therapist and an admin genuinely need those fields; nobody else
+    # does, and no caller outside the therapist's own calendar reads them.
+    # Everyone else still sees that the slot is taken, which is all a person
+    # choosing a time needs to know.
+    if not await _may_see_booking_details(db, current_user, therapist.id):
+        result["slots"] = [_without_patient_details(s) for s in result["slots"]]
+    return result
+
+
+async def _may_see_booking_details(db: Prisma, user, therapist_id: str) -> bool:
+    if user.role == Role.ADMIN:
+        return True
+    if user.role != Role.THERAPIST:
+        return False
+    own = await get_therapist_by_user(db, user.id)
+    return own is not None and own.id == therapist_id
+
+
+def _without_patient_details(slot: dict) -> dict:
+    """Keeps date, time, status and sessionType; drops everything personal."""
+    return {
+        **slot,
+        "patientName": None,
+        "patientPhone": None,
+        "fee": None,
+        "sessionId": None,
+    }
 
 
 @router.get("/{therapist_id}", response_model=TherapistResponse)

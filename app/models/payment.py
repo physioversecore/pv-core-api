@@ -83,6 +83,26 @@ class SessionPaymentResponse(BaseModel):
         from_attributes = True
 
 
+class GatewayInitiationResponse(BaseModel):
+    """Describes how the client should start a payment on the gateway."""
+    type: str
+    url: str | None = None
+    formFields: dict | None = None
+    expiresAt: datetime | None = None
+
+
 class BookingPaymentResponse(BaseModel):
     session: SessionPaymentResponse
     payment: PaymentResponse
+    initiation: GatewayInitiationResponse | None = None
+
+
+class PaymentConfirmRequest(BaseModel):
+    """Payload sent by the webhook route handler to trigger a server-side
+    verification of the gateway callback."""
+    params: dict = Field(default_factory=dict)
+
+
+class PaymentConfirmResponse(BaseModel):
+    payment: PaymentResponse
+    result: str

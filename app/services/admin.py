@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from prisma import Prisma
 
@@ -411,6 +411,8 @@ async def get_admin_patient(db: Prisma, patient_id: str):
     if not u or u.role != "PATIENT":
         return None
 
+    profile = await db.patientprofile.find_unique(where={"userId": u.id})
+
     sessions_raw = await db.session.find_many(
         where={"patientId": u.id},
         include={"therapist": True},
@@ -425,17 +427,38 @@ async def get_admin_patient(db: Prisma, patient_id: str):
             therapist_name = last_session.therapist.name
             therapist_id_val = last_session.therapist.id
 
+    dob_iso = None
+    age = None
+    if profile and profile.dob:
+        dob_iso = profile.dob.strftime("%Y-%m-%d")
+        today = date.today()
+        age = today.year - profile.dob.year - (
+            (today.month, today.day) < (profile.dob.month, profile.dob.day)
+        )
+
     return {
         "id": u.id,
         "name": u.name,
-        "city": u.city or "",
+        "city": u.city or (profile.city if profile else ""),
         "sessions": session_count,
         "therapist": therapist_name,
         "therapistId": therapist_id_val,
         "joined": u.createdAt.strftime("%Y-%m-%d") if u.createdAt else "",
         "isActive": u.status == "APPROVED",
-        "phone": u.phone,
-        "email": u.email,
+        "phone": getattr(u, "phone", None),
+        "email": getattr(u, "email", None),
+        "photo": profile.photo if profile else None,
+        "address": profile.address if profile else None,
+        "history": profile.history if profile else None,
+        "dob": dob_iso,
+        "age": age,
+        "gender": getattr(profile, "gender", None) if profile else None,
+        "condition": getattr(u, "condition", None),
+        "emergencyName": profile.emergencyName if profile else None,
+        "emergencyRelation": profile.emergencyRelation if profile else None,
+        "emergencyPhone": profile.emergencyPhone if profile else None,
+        "notifEmail": profile.notifEmail if profile else None,
+        "notifSms": profile.notifSms if profile else None,
     }
 
 
@@ -453,11 +476,40 @@ async def update_admin_patient(db: Prisma, patient_id: str, data: dict):
         user_fields["phone"] = data["phone"]
     if "email" in data:
         user_fields["email"] = data["email"]
+    if "condition" in data:
+        user_fields["condition"] = data["condition"]
     if "isActive" in data:
         user_fields["status"] = "APPROVED" if data["isActive"] else "REJECTED"
 
     if user_fields:
-        await db.user.update(where={"id": patient_id}, data=user_fields)
+        u = await db.user.update(where={"id": patient_id}, data=user_fields)
+
+    profile = await db.patientprofile.find_unique(where={"userId": u.id})
+
+    profile_fields = {}
+    for key in ("address", "history", "gender", "emergencyName",
+                "emergencyRelation", "emergencyPhone", "notifEmail", "notifSms"):
+        if key in data:
+            profile_fields[key] = data[key]
+    if "dob" in data:
+        dob = data["dob"]
+        profile_fields["dob"] = (
+            datetime.fromisoformat(dob) if dob else None
+        )
+
+    if profile_fields:
+        if profile:
+            await db.patientprofile.update(where={"userId": u.id}, data=profile_fields)
+        else:
+            await db.patientprofile.create(
+                data={
+                    "userId": u.id,
+                    "name": u.name or "Patient",
+                    "phone": u.phone or "",
+                    "city": u.city or "Kathmandu",
+                    **profile_fields,
+                }
+            )
 
     return await get_admin_patient(db, patient_id)
 
@@ -497,7 +549,7 @@ async def get_admin_earnings(db: Prisma) -> dict:
 
     payments = await db.payment.find_many(
         where={
-            "status": "PENDING",
+            "status": "COMPLETED",
             "createdAt": {"gte": month_start.replace(tzinfo=None)},
         }
     )
@@ -507,6 +559,62 @@ async def get_admin_earnings(db: Prisma) -> dict:
         "platform_earnings": total,
         "description": "Platform fees collected this month",
     }
+
+
+async def get_admin_earnings_trend(db: Prisma) -> dict:
+    """Daily (14d), weekly (8w) and monthly (6m) earnings buckets from completed payments."""
+    from collections import defaultdict
+
+    now = datetime.now(timezone.utc)
+    payments = await db.payment.find_many(
+        where={"status": "COMPLETED"},
+        order={"createdAt": "asc"},
+    )
+
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    # ── Daily: last 14 calendar days ────────────────────────────────────────
+    daily = defaultdict(float)
+    for p in payments:
+        if p.createdAt:
+            daily[p.createdAt.date().isoformat()] += p.amount
+    daily_points = []
+    for i in range(13, -1, -1):
+        day = (now - timedelta(days=i)).date()
+        daily_points.append({
+            "label": day.strftime("%d %b"),
+            "amount": round(daily.get(day.isoformat(), 0.0), 2),
+        })
+
+    # ── Weekly: last 8 ISO weeks (Mon–Sun) ─────────────────────────────────
+    today = now.date()
+    monday = today - timedelta(days=today.weekday())
+    weekly_points = []
+    for i in range(7, -1, -1):
+        start = monday - timedelta(weeks=i)
+        end = start + timedelta(days=7)
+        total = sum(
+            p.amount
+            for p in payments
+            if p.createdAt and start <= p.createdAt.date() < end
+        )
+        weekly_points.append({"label": start.strftime("%d %b"), "amount": round(total, 2)})
+
+    # ── Monthly: last 6 months ──────────────────────────────────────────────
+    monthly = defaultdict(float)
+    for p in payments:
+        if p.createdAt:
+            monthly[p.createdAt.strftime("%Y-%m")] += p.amount
+    monthly_points = []
+    for i in range(5, -1, -1):
+        d = now.replace(day=1) - timedelta(days=i * 31)
+        key = d.strftime("%Y-%m")
+        monthly_points.append({
+            "label": month_labels[d.month - 1],
+            "amount": round(monthly.get(key, 0.0), 2),
+        })
+
+    return {"daily": daily_points, "weekly": weekly_points, "monthly": monthly_points}
 
 
 async def get_admin_recent_activity(db: Prisma, limit: int = 10) -> list[dict]:
@@ -557,6 +665,7 @@ async def get_admin_bookings(
     limit: int = 10,
     search: str | None = None,
     status: str | None = None,
+    patient_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     sort_by: str | None = None,
@@ -564,8 +673,14 @@ async def get_admin_bookings(
 ):
     where: dict = {}
 
-    if search:
+    if patient_id:
+        where["patientId"] = patient_id
+
+    if search and search.lower().startswith("bk-"):
+        where["id"] = {"endsWith": search[3:].lower(), "mode": "insensitive"}
+    elif search:
         where["OR"] = [
+            {"id": {"contains": search, "mode": "insensitive"}},
             {"patient": {"name": {"contains": search, "mode": "insensitive"}}},
             {"therapist": {"name": {"contains": search, "mode": "insensitive"}}},
         ]

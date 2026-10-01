@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -24,7 +25,6 @@ PAYMENT_METHODS = [
     {"id": "esewa",      "label": "eSewa",        "icon": "\U0001f4b3", "type": "nepal",         "subtype": "Digital wallet"},
     {"id": "khalti",     "label": "Khalti",        "icon": "\U0001f4b3", "type": "nepal",         "subtype": "Digital wallet"},
     {"id": "connectips", "label": "ConnectIPS",    "icon": "\U0001f3e6", "type": "nepal",         "subtype": "Bank transfer"},
-    {"id": "imepay",     "label": "IME Pay",       "icon": "\U0001f4b3", "type": "nepal",         "subtype": "Digital wallet"},
     {"id": "fonepay",    "label": "FonePay",       "icon": "\U0001f4f1", "type": "nepal",         "subtype": "QR/mobile"},
     {"id": "cash",       "label": "Cash",          "icon": "\U0001f4b5", "type": "nepal",         "subtype": "Pay on visit"},
     {"id": "card",       "label": "Card",          "icon": "\U0001f4b3", "type": "international", "subtype": "Credit/Debit"},
@@ -45,11 +45,18 @@ async def main():
         print("SKIP  currencies — already exists")
 
     methods_row = await get_setting(db, "payment-methods")
-    if not methods_row:
+    existing = json.loads(methods_row.jsonValue) if methods_row else None
+    if existing is None:
         await upsert_setting(db, "payment-methods", PAYMENT_METHODS)
         print(f"CREATED payment-methods — {len(PAYMENT_METHODS)} entries")
     else:
-        print("SKIP  payment-methods — already exists")
+        # IME Pay merged into Khalti (Khalti by IME) — prune it idempotently.
+        pruned = [m for m in existing if m.get("id") != "imepay"]
+        if pruned != existing:
+            await upsert_setting(db, "payment-methods", pruned)
+            print(f"PRUNED imepay from payment-methods — {len(pruned)} entries")
+        else:
+            print("SKIP  payment-methods — already exists")
 
     await db.disconnect()
     print("\nSettings seeded.")

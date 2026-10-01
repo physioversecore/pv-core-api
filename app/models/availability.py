@@ -146,6 +146,43 @@ class SlotRangeResponse(BaseModel):
     blocks: list[BlockInfoResponse]
 
 
+class BulkSlotInfo(BaseModel):
+    """One slot in a bulk answer.
+
+    Deliberately narrower than `SlotInfo`: no patient name, phone, fee or
+    session id. A bulk read is discovery's, and it must not become a way to
+    read other patients' booking details out of a therapist's calendar.
+    """
+
+    date: str
+    time: str
+    status: str
+
+
+class NextFreeSlot(BaseModel):
+    date: str
+    time: str
+
+
+class TherapistSlotsEntry(BaseModel):
+    therapistId: str
+    slots: list[BulkSlotInfo]
+    nextFree: NextFreeSlot | None = None
+    openCount: int
+
+
+class UnansweredTherapist(BaseModel):
+    therapistId: str
+    reason: str
+
+
+class BulkSlotRangeResponse(BaseModel):
+    fromDate: str
+    toDate: str
+    therapists: list[TherapistSlotsEntry]
+    unavailable: list[UnansweredTherapist]
+
+
 class BlockRangeResponse(BaseModel):
     blocked: int
     cancelledCount: int
